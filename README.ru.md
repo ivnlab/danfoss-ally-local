@@ -45,8 +45,12 @@
    твоего Home Assistant.
 2. Скопируй `credentials.example.py` в `credentials.py` (в той же папке)
    и впиши свои `local_key` шлюза, его device_id, IP в локальной сети, и
-   `device_id`/`cid` каждого RT. Как добыть `local_key` без root на
-   телефоне — см. [`docs/LOCAL_KEY_EXTRACTION_METHOD.md`](docs/LOCAL_KEY_EXTRACTION_METHOD.md),
+   `device_id`/`cid` каждого RT.
+   [`get-key-danfoss-ally`](https://github.com/ivnlab/get-key-danfoss-ally)
+   достаёт всё это автоматически прямо из памяти приложения Danfoss Ally
+   и печатает готовый сниппет — как и почему это работает (нужен
+   рутованный Android), см.
+   [`docs/LOCAL_KEY_EXTRACTION_METHOD.md`](docs/LOCAL_KEY_EXTRACTION_METHOD.md);
    как сопоставлялись номера датапоинтов — см.
    [`docs/RT1_DP_MAPPING.md`](docs/RT1_DP_MAPPING.md) (пригодится, если у
    твоего устройства DP отличаются).

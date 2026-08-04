@@ -45,8 +45,12 @@ form.
    `config/custom_components/` folder.
 2. Copy `credentials.example.py` to `credentials.py` (same folder) and
    fill in your gateway's `local_key`, device ID, LAN IP, and each RT's
-   `device_id`/`cid`. See [`docs/LOCAL_KEY_EXTRACTION_METHOD.md`](docs/LOCAL_KEY_EXTRACTION_METHOD.md)
-   for how to get the `local_key` without rooting your phone, and
+   `device_id`/`cid`.
+   [`get-key-danfoss-ally`](https://github.com/ivnlab/get-key-danfoss-ally)
+   extracts these for you from the Danfoss Ally app's own memory and
+   prints a ready-to-paste snippet - see
+   [`docs/LOCAL_KEY_EXTRACTION_METHOD.md`](docs/LOCAL_KEY_EXTRACTION_METHOD.md)
+   for how/why this works (requires a rooted Android device). See
    [`docs/RT1_DP_MAPPING.md`](docs/RT1_DP_MAPPING.md) for how the raw
    datapoint numbers were mapped (useful if your device reports different
    DPs).
