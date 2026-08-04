@@ -44,8 +44,8 @@ JSON-записи) и адресуются локально через `tuya_loc
 
 ## Добавление в Home Assistant через `tuya_local`
 
-У пользователя уже установлена интеграция **Tuya Local** (домен `tuya_local`,
-проект make-all/tuya-local — не путать с LocalTuya rospogrigio). Её форма
+Если уже установлена интеграция **Tuya Local** (домен `tuya_local`,
+проект make-all/tuya-local — не путать с LocalTuya rospogrigio) — её форма
 ручного добавления (`setup_mode: manual`) содержит поле `device_cid` из
 коробки — проверено напрямую через `config_entries/flow` REST API на живой
 инсталляции. Для каждого суб-устройства из таблицы выше: `device_id` + `host`
