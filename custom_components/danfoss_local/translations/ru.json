@@ -1,0 +1,56 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Danfoss Icon2",
+        "description": "Добавляет 6 термостатов Icon2 RT за шлюзом Ally, подключаясь напрямую по локальной сети в обход облака Danfoss. Данные подключения захардкожены в const.py под конкретный дом."
+      }
+    },
+    "abort": {
+      "already_configured": "Уже настроено"
+    }
+  },
+  "entity": {
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "Дома",
+              "away": "Не дома",
+              "pause": "Пауза",
+              "holiday": "Выходные"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "floor_temperature": { "name": "Температура пола" },
+      "humidity": { "name": "Влажность" },
+      "battery": { "name": "Заряд батареи" },
+      "setpoint_change_source": { "name": "Источник изменения уставки" },
+      "adaptation_run_status": { "name": "Статус адаптации" }
+    },
+    "binary_sensor": {
+      "thermal_actuator": { "name": "Термоголовка" },
+      "fault": { "name": "Неисправность" },
+      "setpoint_change_source": { "name": "Уставка изменена локально" },
+      "child_lock_status": { "name": "Замок от детей" }
+    },
+    "number": {
+      "upper_temp": { "name": "Верхний предел температуры" },
+      "lower_temp": { "name": "Нижний предел температуры" },
+      "at_home_setting": { "name": "Температура дома" },
+      "leaving_home_setting": { "name": "Температура вне дома" },
+      "pause_setting": { "name": "Температура паузы" },
+      "holiday_setting": { "name": "Температура на выходных" }
+    },
+    "switch": {
+      "pre_heat": { "name": "Преднагрев" }
+    },
+    "lock": {
+      "child_lock": { "name": "Замок от детей" }
+    }
+  }
+}

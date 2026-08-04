@@ -1,0 +1,126 @@
+"""Sensor support for Danfoss Icon2 (Local)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
+
+from .const import DOMAIN
+from .coordinator import DanfossLocalCoordinator
+from .entity import DanfossLocalEntity, async_setup_dynamic_platform_entities
+
+
+@dataclass(frozen=True, kw_only=True)
+class DanfossLocalSensorDescription(SensorEntityDescription):
+    """Describe a Danfoss Icon2 (Local) sensor entity."""
+
+    exists_fn: Callable[[dict[str, object]], bool]
+    value_fn: Callable[[dict[str, object]], object]
+    unique_prefix: str
+
+
+SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
+    DanfossLocalSensorDescription(
+        key="floor_temperature",
+        translation_key="floor_temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        exists_fn=lambda device: "floor_temperature" in device,
+        value_fn=lambda device: device["floor_temperature"],
+        unique_prefix="floor temperature",
+    ),
+    DanfossLocalSensorDescription(
+        key="humidity",
+        translation_key="humidity",
+        device_class=SensorDeviceClass.HUMIDITY,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        exists_fn=lambda device: "humidity" in device,
+        value_fn=lambda device: device["humidity"],
+        unique_prefix="humidity",
+    ),
+    DanfossLocalSensorDescription(
+        key="battery",
+        translation_key="battery",
+        device_class=SensorDeviceClass.BATTERY,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        exists_fn=lambda device: "battery" in device,
+        value_fn=lambda device: device["battery"],
+        unique_prefix="battery",
+    ),
+    DanfossLocalSensorDescription(
+        key="setpoint_change_source",
+        translation_key="setpoint_change_source",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        exists_fn=lambda device: "setpointchangesource" in device,
+        value_fn=lambda device: device["setpointchangesource"],
+        unique_prefix="setpoint change source",
+    ),
+    DanfossLocalSensorDescription(
+        key="adaptation_run_status",
+        translation_key="adaptation_run_status",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        exists_fn=lambda device: "adaptation_runstatus" in device,
+        value_fn=lambda device: device["adaptation_runstatus"],
+        unique_prefix="adaptation run status",
+    ),
+)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities,
+) -> None:
+    """Set up Danfoss Icon2 (Local) sensor entities."""
+    coordinator: DanfossLocalCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    def _build_entities(coordinator: DanfossLocalCoordinator) -> list[DanfossLocalSensor]:
+        entities: list[DanfossLocalSensor] = []
+        for device_id, device in (coordinator.data or {}).items():
+            for description in SENSORS:
+                if description.exists_fn(device):
+                    entities.append(DanfossLocalSensor(coordinator, device_id, description))
+        return entities
+
+    async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)
+
+
+class DanfossLocalSensor(DanfossLocalEntity, SensorEntity):
+    """Representation of a Danfoss Icon2 (Local) sensor."""
+
+    entity_description: DanfossLocalSensorDescription
+
+    def __init__(
+        self,
+        coordinator: DanfossLocalCoordinator,
+        device_id: str,
+        description: DanfossLocalSensorDescription,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, device_id)
+        self.entity_description = description
+        self._attr_unique_id = f"{description.unique_prefix}_{device_id}_danfoss_local"
+
+    @property
+    def native_value(self) -> object:
+        """Return the current sensor value."""
+        try:
+            return self.entity_description.value_fn(self.device)
+        except (KeyError, TypeError):
+            return None

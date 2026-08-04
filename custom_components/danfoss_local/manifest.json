@@ -1,0 +1,11 @@
+{
+  "domain": "danfoss_local",
+  "name": "Danfoss Icon2",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/mtrab/danfoss_ally",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": ["tinytuya==1.20.0"],
+  "version": "0.1.0"
+}

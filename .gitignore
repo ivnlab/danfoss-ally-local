@@ -1,0 +1,5 @@
+custom_components/danfoss_local/credentials.py
+
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,56 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Danfoss Icon2",
+        "description": "Add the 6 Icon2 RT thermostats behind the Ally Gateway, connecting directly over the local network instead of Danfoss's cloud. Connection details are hardcoded in const.py for this home's gateway."
+      }
+    },
+    "abort": {
+      "already_configured": "Already configured"
+    }
+  },
+  "entity": {
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "Home",
+              "away": "Away",
+              "pause": "Pause",
+              "holiday": "Holiday"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "floor_temperature": { "name": "Floor temperature" },
+      "humidity": { "name": "Humidity" },
+      "battery": { "name": "Battery" },
+      "setpoint_change_source": { "name": "Setpoint change source" },
+      "adaptation_run_status": { "name": "Adaptation run status" }
+    },
+    "binary_sensor": {
+      "thermal_actuator": { "name": "Thermal actuator" },
+      "fault": { "name": "Fault" },
+      "setpoint_change_source": { "name": "Setpoint changed locally" },
+      "child_lock_status": { "name": "Child lock" }
+    },
+    "number": {
+      "upper_temp": { "name": "Upper temperature" },
+      "lower_temp": { "name": "Lower temperature" },
+      "at_home_setting": { "name": "Home temperature" },
+      "leaving_home_setting": { "name": "Away temperature" },
+      "pause_setting": { "name": "Pause temperature" },
+      "holiday_setting": { "name": "Holiday temperature" }
+    },
+    "switch": {
+      "pre_heat": { "name": "Pre-heat" }
+    },
+    "lock": {
+      "child_lock": { "name": "Child lock" }
+    }
+  }
+}
