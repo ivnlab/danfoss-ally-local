@@ -26,10 +26,18 @@
       }
     },
     "sensor": {
-      "floor_temperature": { "name": "Температура пола" },
+      "air_temperature": { "name": "t° воздуха" },
+      "floor_temperature": { "name": "t° пола" },
       "humidity": { "name": "Влажность" },
       "battery": { "name": "Заряд батареи" },
-      "setpoint_change_source": { "name": "Источник изменения уставки" },
+      "setpoint_change_source": {
+        "name": "Источник изменения уставки",
+        "state": {
+          "Manual": "Вручную",
+          "Externally": "Внешнее",
+          "schedule": "Расписание"
+        }
+      },
       "adaptation_run_status": { "name": "Статус адаптации" }
     },
     "binary_sensor": {
@@ -39,12 +47,12 @@
       "child_lock_status": { "name": "Замок от детей" }
     },
     "number": {
-      "upper_temp": { "name": "Верхний предел температуры" },
-      "lower_temp": { "name": "Нижний предел температуры" },
-      "at_home_setting": { "name": "Температура дома" },
-      "leaving_home_setting": { "name": "Температура вне дома" },
-      "pause_setting": { "name": "Температура паузы" },
-      "holiday_setting": { "name": "Температура на выходных" }
+      "upper_temp": { "name": "Верхний предел t°" },
+      "lower_temp": { "name": "Нижний предел t°" },
+      "at_home_setting": { "name": "t° дома" },
+      "leaving_home_setting": { "name": "t° вне дома" },
+      "pause_setting": { "name": "t° паузы" },
+      "holiday_setting": { "name": "t° на выходных" }
     },
     "switch": {
       "pre_heat": { "name": "Преднагрев" }

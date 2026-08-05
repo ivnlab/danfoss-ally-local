@@ -26,10 +26,18 @@
       }
     },
     "sensor": {
+      "air_temperature": { "name": "Air temperature" },
       "floor_temperature": { "name": "Floor temperature" },
       "humidity": { "name": "Humidity" },
       "battery": { "name": "Battery" },
-      "setpoint_change_source": { "name": "Setpoint change source" },
+      "setpoint_change_source": {
+        "name": "Setpoint change source",
+        "state": {
+          "Manual": "Manual",
+          "Externally": "Externally",
+          "schedule": "Schedule"
+        }
+      },
       "adaptation_run_status": { "name": "Adaptation run status" }
     },
     "binary_sensor": {

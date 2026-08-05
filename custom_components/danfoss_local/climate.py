@@ -192,16 +192,6 @@ class DanfossLocalClimate(DanfossLocalEntity, ClimateEntity):
         """Return the active preset mode."""
         return MODE_TO_PRESET.get(self.device_value("mode"))
 
-    @property
-    def icon(self) -> str | None:
-        """Return an icon matching the active preset (same set as mtrab/danfoss_ally)."""
-        return {
-            PRESET_HOME: "mdi:home",
-            PRESET_AWAY: "mdi:home-export-outline",
-            PRESET_PAUSE: "mdi:pause-circle-outline",
-            PRESET_HOLIDAY: "mdi:palm-tree",
-        }.get(self.preset_mode)
-
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set a new HVAC mode."""
         optimistic_updates: dict[str, Any]

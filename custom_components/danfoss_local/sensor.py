@@ -30,7 +30,20 @@ class DanfossLocalSensorDescription(SensorEntityDescription):
     unique_prefix: str
 
 
+SETPOINT_CHANGE_SOURCE_OPTIONS = ["Manual", "Externally", "schedule"]
+
+
 SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
+    DanfossLocalSensorDescription(
+        key="temperature",
+        translation_key="air_temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        exists_fn=lambda device: "temperature" in device,
+        value_fn=lambda device: device["temperature"],
+        unique_prefix="air temperature",
+    ),
     DanfossLocalSensorDescription(
         key="floor_temperature",
         translation_key="floor_temperature",
@@ -65,6 +78,8 @@ SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
     DanfossLocalSensorDescription(
         key="setpoint_change_source",
         translation_key="setpoint_change_source",
+        device_class=SensorDeviceClass.ENUM,
+        options=SETPOINT_CHANGE_SOURCE_OPTIONS,
         entity_category=EntityCategory.DIAGNOSTIC,
         exists_fn=lambda device: "setpointchangesource" in device,
         value_fn=lambda device: device["setpointchangesource"],
