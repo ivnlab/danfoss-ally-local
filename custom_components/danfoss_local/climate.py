@@ -49,10 +49,11 @@ async def async_setup_entry(
     coordinator: DanfossLocalCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     def _build_entities(coordinator: DanfossLocalCoordinator) -> list[DanfossLocalClimate]:
+        # Every configured RT is a thermostat; don't wait for a successful
+        # first poll (which is what set "isThermostat") to create the entity.
         return [
             DanfossLocalClimate(coordinator, device_id)
-            for device_id, device in (coordinator.data or {}).items()
-            if device.get("isThermostat")
+            for device_id in (coordinator.data or {})
         ]
 
     async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)

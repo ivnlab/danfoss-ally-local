@@ -25,7 +25,6 @@ from .entity import DanfossLocalEntity, async_setup_dynamic_platform_entities
 class DanfossLocalSensorDescription(SensorEntityDescription):
     """Describe a Danfoss Icon2 (Local) sensor entity."""
 
-    exists_fn: Callable[[dict[str, object]], bool]
     value_fn: Callable[[dict[str, object]], object]
     unique_prefix: str
 
@@ -40,7 +39,6 @@ SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
-        exists_fn=lambda device: "temperature" in device,
         value_fn=lambda device: device["temperature"],
         unique_prefix="air temperature",
     ),
@@ -50,7 +48,6 @@ SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
-        exists_fn=lambda device: "floor_temperature" in device,
         value_fn=lambda device: device["floor_temperature"],
         unique_prefix="floor temperature",
     ),
@@ -60,7 +57,6 @@ SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
         device_class=SensorDeviceClass.HUMIDITY,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        exists_fn=lambda device: "humidity" in device,
         value_fn=lambda device: device["humidity"],
         unique_prefix="humidity",
     ),
@@ -71,7 +67,6 @@ SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        exists_fn=lambda device: "battery" in device,
         value_fn=lambda device: device["battery"],
         unique_prefix="battery",
     ),
@@ -81,7 +76,6 @@ SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=SETPOINT_CHANGE_SOURCE_OPTIONS,
         entity_category=EntityCategory.DIAGNOSTIC,
-        exists_fn=lambda device: "setpointchangesource" in device,
         value_fn=lambda device: device["setpointchangesource"],
         unique_prefix="setpoint change source",
     ),
@@ -90,7 +84,6 @@ SENSORS: tuple[DanfossLocalSensorDescription, ...] = (
         translation_key="adaptation_run_status",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
-        exists_fn=lambda device: "adaptation_runstatus" in device,
         value_fn=lambda device: device["adaptation_runstatus"],
         unique_prefix="adaptation run status",
     ),
@@ -106,12 +99,13 @@ async def async_setup_entry(
     coordinator: DanfossLocalCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     def _build_entities(coordinator: DanfossLocalCoordinator) -> list[DanfossLocalSensor]:
-        entities: list[DanfossLocalSensor] = []
-        for device_id, device in (coordinator.data or {}).items():
-            for description in SENSORS:
-                if description.exists_fn(device):
-                    entities.append(DanfossLocalSensor(coordinator, device_id, description))
-        return entities
+        # Fixed entity set per thermostat - see number.py for why creation is
+        # not gated on the key already being present in the device data.
+        return [
+            DanfossLocalSensor(coordinator, device_id, description)
+            for device_id in (coordinator.data or {})
+            for description in SENSORS
+        ]
 
     async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)
 

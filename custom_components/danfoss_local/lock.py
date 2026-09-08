@@ -21,10 +21,11 @@ async def async_setup_entry(
     coordinator: DanfossLocalCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     def _build_entities(coordinator: DanfossLocalCoordinator) -> list[DanfossLocalChildLock]:
+        # One per thermostat, unconditionally - see number.py for why creation
+        # is not gated on the dp already being present in the device data.
         return [
             DanfossLocalChildLock(coordinator, device_id)
-            for device_id, device in (coordinator.data or {}).items()
-            if "child_lock" in device
+            for device_id in (coordinator.data or {})
         ]
 
     async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)
@@ -42,9 +43,10 @@ class DanfossLocalChildLock(DanfossLocalEntity, LockEntity):
         self._attr_unique_id = f"child_lock_{device_id}_danfoss_local"
 
     @property
-    def is_locked(self) -> bool:
-        """Return whether the child lock is engaged."""
-        return bool(self.device.get("child_lock"))
+    def is_locked(self) -> bool | None:
+        """Return whether the child lock is engaged (None until first report)."""
+        value = self.device.get("child_lock")
+        return None if value is None else bool(value)
 
     async def async_lock(self, **kwargs) -> None:
         """Engage the child lock."""

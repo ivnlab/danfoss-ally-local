@@ -112,12 +112,16 @@ async def async_setup_entry(
     coordinator: DanfossLocalCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     def _build_entities(coordinator: DanfossLocalCoordinator) -> list[DanfossLocalNumber]:
-        entities: list[DanfossLocalNumber] = []
-        for device_id, device in (coordinator.data or {}).items():
-            for description in NUMBERS:
-                if description.key in device:
-                    entities.append(DanfossLocalNumber(coordinator, device_id, description))
-        return entities
+        # Every RT exposes the same fixed set of setpoints, so create all of
+        # them for every thermostat unconditionally. The gateway only reports
+        # a dp locally once the device has changed it at least once, so
+        # gating on "key in device" made e.g. the Home setpoint appear only
+        # on thermostats whose Home temperature had ever been touched.
+        return [
+            DanfossLocalNumber(coordinator, device_id, description)
+            for device_id in (coordinator.data or {})
+            for description in NUMBERS
+        ]
 
     async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)
 

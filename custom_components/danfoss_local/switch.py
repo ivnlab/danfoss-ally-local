@@ -21,10 +21,11 @@ async def async_setup_entry(
     coordinator: DanfossLocalCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     def _build_entities(coordinator: DanfossLocalCoordinator) -> list[DanfossLocalPreheatSwitch]:
+        # One per thermostat, unconditionally - see number.py for why creation
+        # is not gated on the dp already being present in the device data.
         return [
             DanfossLocalPreheatSwitch(coordinator, device_id)
-            for device_id, device in (coordinator.data or {}).items()
-            if "switch" in device
+            for device_id in (coordinator.data or {})
         ]
 
     async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)
@@ -43,9 +44,10 @@ class DanfossLocalPreheatSwitch(DanfossLocalEntity, SwitchEntity):
         self._attr_unique_id = f"pre_heat_{device_id}_danfoss_local"
 
     @property
-    def is_on(self) -> bool:
-        """Return whether pre-heat is enabled."""
-        return bool(self.device.get("switch"))
+    def is_on(self) -> bool | None:
+        """Return whether pre-heat is enabled (None until first report)."""
+        value = self.device.get("switch")
+        return None if value is None else bool(value)
 
     async def async_turn_on(self, **kwargs) -> None:
         """Enable pre-heat."""

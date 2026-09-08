@@ -23,7 +23,6 @@ from .entity import DanfossLocalEntity, async_setup_dynamic_platform_entities
 class DanfossLocalBinarySensorDescription(BinarySensorEntityDescription):
     """Describe a Danfoss Icon2 (Local) binary sensor."""
 
-    exists_fn: Callable[[dict[str, object]], bool]
     value_fn: Callable[[dict[str, object]], bool]
     unique_prefix: str
 
@@ -34,7 +33,6 @@ BINARY_SENSORS: tuple[DanfossLocalBinarySensorDescription, ...] = (
         translation_key="thermal_actuator",
         device_class=BinarySensorDeviceClass.OPENING,
         icon="mdi:pipe-valve",
-        exists_fn=lambda device: "output_status" in device,
         value_fn=lambda device: bool(device["output_status"]),
         unique_prefix="thermal actuator",
     ),
@@ -43,16 +41,12 @@ BINARY_SENSORS: tuple[DanfossLocalBinarySensorDescription, ...] = (
         translation_key="fault",
         device_class=BinarySensorDeviceClass.PROBLEM,
         entity_category=EntityCategory.DIAGNOSTIC,
-        exists_fn=lambda device: "fault" in device,
         value_fn=lambda device: bool(device["fault"]),
         unique_prefix="fault",
     ),
     DanfossLocalBinarySensorDescription(
         key="setpoint_change_source",
         translation_key="setpoint_change_source",
-        exists_fn=lambda device: (
-            "setpointchangesource" in device or "SetpointChangeSource" in device
-        ),
         value_fn=lambda device: (
             device.get("setpointchangesource", device.get("SetpointChangeSource"))
             == "Manual"
@@ -63,7 +57,6 @@ BINARY_SENSORS: tuple[DanfossLocalBinarySensorDescription, ...] = (
         key="child_lock_status",
         translation_key="child_lock_status",
         device_class=BinarySensorDeviceClass.LOCK,
-        exists_fn=lambda device: "child_lock" in device,
         value_fn=lambda device: not bool(device["child_lock"]),
         unique_prefix="child lock status",
     ),
@@ -81,14 +74,13 @@ async def async_setup_entry(
     def _build_entities(
         coordinator: DanfossLocalCoordinator,
     ) -> list[DanfossLocalBinarySensor]:
-        entities: list[DanfossLocalBinarySensor] = []
-        for device_id, device in (coordinator.data or {}).items():
-            for description in BINARY_SENSORS:
-                if description.exists_fn(device):
-                    entities.append(
-                        DanfossLocalBinarySensor(coordinator, device_id, description)
-                    )
-        return entities
+        # Fixed entity set per thermostat - see number.py for why creation is
+        # not gated on the key already being present in the device data.
+        return [
+            DanfossLocalBinarySensor(coordinator, device_id, description)
+            for device_id in (coordinator.data or {})
+            for description in BINARY_SENSORS
+        ]
 
     async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)
 
@@ -110,9 +102,9 @@ class DanfossLocalBinarySensor(DanfossLocalEntity, BinarySensorEntity):
         self._attr_unique_id = f"{description.unique_prefix}_{device_id}_danfoss_local"
 
     @property
-    def is_on(self) -> bool:
-        """Return the current binary sensor state."""
+    def is_on(self) -> bool | None:
+        """Return the current binary sensor state (None until first report)."""
         try:
             return self.entity_description.value_fn(self.device)
         except (KeyError, TypeError):
-            return False
+            return None
