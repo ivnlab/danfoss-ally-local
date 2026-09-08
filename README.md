@@ -90,7 +90,7 @@ GPLv3, inherited from `mtrab/danfoss_ally`.
 
 ## A personal note
 
-For a year I kept rerouting requests to the Danfoss API through VPNs and
+For a couple of years I kept rerouting requests to the Danfoss API through VPNs and
 proxies, and in the end I just got tired of it. I could not care less about
 their decision to geo-restrict the API - it is about the dumbest restriction
 imaginable. What disgusts me is something else - that they find it normal to
