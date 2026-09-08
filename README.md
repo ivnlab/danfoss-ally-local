@@ -91,8 +91,11 @@ GPLv3, inherited from `mtrab/danfoss_ally`.
 ## A personal note
 
 For a year I kept rerouting requests to the Danfoss API through VPNs and
-proxies, and in the end I just got tired of it. I am not thrilled about how
-Danfoss may feel about this, but my heating should no longer depend on whoever
+proxies, and in the end I just got tired of it. I could not care less about
+their decision to geo-restrict the API - it is about the dumbest restriction
+imaginable. What disgusts me is something else - that they find it normal to
+take away from people what they paid for, people who chose their heating system
+precisely because it had an open API. My heating should not depend on whoever
 decides to play the big boss in this world. And yes, I am from Russia. And yes,
 that is exactly the problem. And yes, I feel sick about what is happening, and
 ashamed of it too, as if part of it were on me.
