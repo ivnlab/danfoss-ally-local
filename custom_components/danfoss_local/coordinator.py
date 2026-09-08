@@ -28,7 +28,9 @@ enough as long as it isn't racing our own poll.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
 
 import tinytuya
@@ -92,6 +94,35 @@ _MODE_TO_SETPOINT: dict[str, str] = {
     "manual": "manual_mode_fast",
 }
 
+# A real full status dump from an Icon2 RT carries ~35 dps. Anything much
+# smaller is an async single-dp update that tinytuya handed back in place of
+# the status reply (see _read_full_status).
+_FULL_STATUS_MIN_DPS = 20
+_STATUS_ATTEMPTS = 3
+_STATUS_RETRY_DELAY = 0.3
+
+
+def _read_full_status(sub: tinytuya.Device) -> tuple[dict[str, Any] | None, bool]:
+    """Read a sub-device status, retrying until it looks like a full dump.
+
+    tinytuya matches gateway replies to requests by cid only. If the gateway
+    also pushes an unsolicited single-dp update for the same cid, status()
+    returns that 1-dp packet as if it were the status. Retry a few times so a
+    momentary hiccup doesn't leave us with a delta; the caller merges a
+    still-partial result as a delta rather than discarding it.
+
+    Returns (dps, is_full). dps is None when the reply had no dps at all.
+    """
+    dps: dict[str, Any] | None = None
+    for attempt in range(_STATUS_ATTEMPTS):
+        result = sub.status()
+        dps = result.get("dps") if isinstance(result, dict) else None
+        if dps and len(dps) >= _FULL_STATUS_MIN_DPS:
+            return dps, True
+        if attempt < _STATUS_ATTEMPTS - 1:
+            time.sleep(_STATUS_RETRY_DELAY)
+    return dps, False
+
 
 class DanfossLocalCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     """Poll and control Danfoss Icon2 RT thermostats over local Tuya protocol."""
@@ -105,14 +136,25 @@ class DanfossLocalCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             name=DOMAIN,
             update_interval=SCAN_INTERVAL,
         )
+        # Deliberately NOT a persistent socket. With persist=True the single
+        # shared connection can get out of step with the gateway (confirmed
+        # live 2026-09-08 via debug log: every status query returned the full
+        # dump of a *different* cid, four replies behind, and tinytuya then
+        # accepted a stray single-dp update as the "status"), and once out of
+        # step it never recovers on its own. A fresh short TCP session per
+        # request costs ~45 ms and cannot inherit a stale reply from the
+        # buffer.
         self._gateway = tinytuya.Device(
             GATEWAY_ID,
             GATEWAY_HOST,
             GATEWAY_LOCAL_KEY,
             version=PROTOCOL_VERSION,
-            persist=True,
+            persist=False,
         )
         self._gateway.set_socketTimeout(6)
+        # Serialize every gateway exchange (polls and writes) - they are run
+        # from different executor threads and must never interleave.
+        self._io_lock = asyncio.Lock()
         self._subs: dict[str, tinytuya.Device] = {}
         self._names: dict[str, str] = {}
         for device_id, cid, name in RT_DEVICES:
@@ -132,28 +174,36 @@ class DanfossLocalCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         """Poll every configured thermostat and translate raw dps to named keys."""
         data: dict[str, dict[str, Any]] = {}
         previous = self.data or {}
-        for device_id, sub in self._subs.items():
-            try:
-                result = await self.hass.async_add_executor_job(sub.status)
-            except Exception as err:  # noqa: BLE001 - tinytuya raises plain Exception
-                _LOGGER.warning("Failed to poll %s: %s", device_id, err)
-                data[device_id] = {**previous.get(device_id, {}), "online": False}
-                continue
+        async with self._io_lock:
+            for device_id, sub in self._subs.items():
+                try:
+                    dps, is_full = await self.hass.async_add_executor_job(
+                        _read_full_status, sub
+                    )
+                except Exception as err:  # noqa: BLE001 - tinytuya raises plain Exception
+                    _LOGGER.warning("Failed to poll %s: %s", device_id, err)
+                    data[device_id] = {**previous.get(device_id, {}), "online": False}
+                    continue
 
-            dps = result.get("dps") if isinstance(result, dict) else None
-            if not dps:
-                _LOGGER.debug("No dps in response for %s: %s", device_id, result)
-                data[device_id] = {**previous.get(device_id, {}), "online": False}
-                continue
+                if not dps:
+                    _LOGGER.debug("No dps in response for %s", device_id)
+                    data[device_id] = {**previous.get(device_id, {}), "online": False}
+                    continue
 
-            # tinytuya's persistent connection to the gateway occasionally
-            # hands back a partial/stray packet instead of a full status
-            # dump (confirmed live 2026-08-04 - a single dp like {"2": ...}
-            # instead of the full set). Merge on top of the last known good
-            # values instead of replacing them, so a partial read doesn't
-            # blank out (or worse, plausibly-wrong-default) every other
-            # field until the next poll happens to be complete.
-            data[device_id] = {**previous.get(device_id, {}), **self._translate(device_id, dps)}
+                if not is_full:
+                    _LOGGER.debug(
+                        "Partial status for %s after %d attempts, merging as delta: %s",
+                        device_id,
+                        _STATUS_ATTEMPTS,
+                        dps,
+                    )
+                # Merge on top of the last known values: a full dump simply
+                # overwrites everything, a (rare) delta updates only the dps
+                # it carries instead of blanking out the rest.
+                data[device_id] = {
+                    **previous.get(device_id, {}),
+                    **self._translate(device_id, dps),
+                }
         return data
 
     def _translate(self, device_id: str, dps: dict[str, Any]) -> dict[str, Any]:
@@ -193,7 +243,8 @@ class DanfossLocalCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if sub is None:
             raise HomeAssistantError(f"Unknown device {device_id}")
         try:
-            result = await self.hass.async_add_executor_job(sub.set_value, dp_id, value)
+            async with self._io_lock:
+                result = await self.hass.async_add_executor_job(sub.set_value, dp_id, value)
         except Exception as err:  # noqa: BLE001
             raise HomeAssistantError(
                 f"Failed to write dp {dp_id} for {device_id}: {err}"
