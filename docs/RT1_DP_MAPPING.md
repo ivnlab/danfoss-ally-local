@@ -1,108 +1,110 @@
-# Расшифровка DP-номеров Icon2 RT (<RT1_DEVICE_ID>, cid <ZIGBEE_BASE_NODE_ID>-01)
+*[Русская версия](RT1_DP_MAPPING.ru.md)*
 
-Источники:
-1. Официальная Tuya-схема продукта `hlbcgne6` (кэш приложения) - единственный
-   источник, где реально видны сырые номера DP и их имена, но покрывает
-   только 9 generic-полей.
-2. `mtrab/danfoss_ally` (custom_components/danfoss_ally/*.py) - зрелая,
-   давно используемая HACS-интеграция.
-3. `mtrab/pydanfossally` - библиотека, на которой построена интеграция;
-   особенно `docs/writable-properties-research.md` (живое тестирование
-   записи/отката против настоящего API Danfoss, отдельно на Ally-радиаторах
-   и на Icon2 RT) и `pydanfossally/const.py` (`SETPOINT_CODES`,
-   `BOOLEAN_CODES`, `PASSTHROUGH_CODES`, `MODE_TO_SETPOINT_CODE`).
+# Icon2 RT datapoint (DP) mapping (<RT1_DEVICE_ID>, cid <ZIGBEE_BASE_NODE_ID>-01)
 
-Важное ограничение источников 2 и 3. они работают с именованным облачным
-API Danfoss (`{"code": "...", "value": ...}`), который уже проксирует Tuya -
-сырых номеров DP там нет вообще, перевод "номер → имя" происходит
-целиком внутри бэкенда Tuya/Danfoss и нигде публично не задокументирован.
-Поэтому для сопоставления с локальным протоколом (сырые номера DP, как их
-отдаёт сам гейтвей по LAN) единственный рабочий способ - живое сравнение:
-менять значение в приложении/HA и смотреть, какой сырой DP поменялся.
-Источники 2 и 3 дают авторитетный список ИМЁН и семантику
-чтения/записи для каждого - какие поля реально можно менять, какие
-read-only - это резко сокращает пространство гипотез при сопоставлении.
+Sources:
+1. The official Tuya product schema `hlbcgne6` (app cache) - the only source
+   that actually shows the raw DP numbers and their names, but it only covers
+   9 generic fields.
+2. `mtrab/danfoss_ally` (custom_components/danfoss_ally/*.py) - a mature,
+   long-used HACS integration.
+3. `mtrab/pydanfossally` - the library the integration is built on; in
+   particular `docs/writable-properties-research.md` (live write/rollback
+   testing against the real Danfoss API, separately on Ally radiators and on
+   Icon2 RT) and `pydanfossally/const.py` (`SETPOINT_CODES`, `BOOLEAN_CODES`,
+   `PASSTHROUGH_CODES`, `MODE_TO_SETPOINT_CODE`).
 
-## Подтверждено официальной Tuya-схемой (functionSchemaList/statusSchemaList)
+Important limitation of sources 2 and 3. They work with the named Danfoss
+cloud API (`{"code": "...", "value": ...}`), which already proxies Tuya - the
+raw DP numbers are not there at all, the number-to-name translation happens
+entirely inside the Tuya/Danfoss backend and is not publicly documented
+anywhere. So the only working way to map against the local protocol (the raw
+DP numbers as the gateway hands them out over the LAN) is live comparison:
+change a value in the app/HA and watch which raw DP changed. Sources 2 and 3
+give an authoritative list of names and the read/write semantics for each -
+which fields can actually be changed, which are read-only - which sharply
+narrows the search space when mapping.
 
-| DP | Имя | Тип | Диапазон |
+## Confirmed by the official Tuya schema (functionSchemaList/statusSchemaList)
+
+| DP | Name | Type | Range |
 |---|---|---|---|
-| 1 | switch | Boolean | **уточнение ниже: это не общее вкл/выкл термостата, а переключатель Pre-heat** |
-| 2 | **mode** | Enum | подтверждено живым тестом 2026-08-04: `leaving_home`/`at_home`/`pause`/`holiday`/`manual`. Официальная Tuya-схема заявляла только [holiday, manual] - неполная, реальных значений больше |
-| 16 | temp_set | Integer /10 | 4.0-35.0°C, fallback-уставка для моделей без раздельных per-mode setpoints |
-| 18 | upper_temp | Integer /10 | 20.0-35.0°C |
-| 27 | lower_temp | Integer /10 | 4.0-20.0°C |
+| 1 | switch | Boolean | **clarified below: not a general thermostat on/off, but the Pre-heat toggle** |
+| 2 | **mode** | Enum | confirmed by live test 2026-08-04: `leaving_home`/`at_home`/`pause`/`holiday`/`manual`. The official Tuya schema only listed [holiday, manual] - incomplete, there are more real values |
+| 16 | temp_set | Integer /10 | 4.0-35.0C, fallback setpoint for models without separate per-mode setpoints |
+| 18 | upper_temp | Integer /10 | 20.0-35.0C |
+| 27 | lower_temp | Integer /10 | 4.0-20.0C |
 | 30 | child_lock | Boolean | |
 | 34 | battery_percentage | Integer | 0-100% |
-| 44 | factory_reset | Boolean | (write-only, не выводить в UI) |
+| 44 | factory_reset | Boolean | (write-only, do not expose in UI) |
 | 45 | fault | Bitmap | |
 
-## Подтверждено сопоставлением с mtrab/danfoss_ally (высокая уверенность)
+## Confirmed by matching against mtrab/danfoss_ally (high confidence)
 
-| DP | Live-значение | Поле (по коду mtrab) | Обоснование |
+| DP | Live value | Field (per mtrab code) | Rationale |
 |---|---|---|---|
-| 3 | "Heat"/"heat_active" | `work_state` | точное совпадение с enum в climate.py; подтверждено 2026-08-04 живым переходом "Heat"→"heat_active" при начале активного нагрева |
-| **140** | **"Inactive"→"active"** | **`output_status`** (термоактуатор) | Проверено 2026-08-04: цель RT6 поднята до 32.5°C (выше текущей), термоголовка в приложении показала "Открыто" - DP140 сменился ровно в этот момент с `"Inactive"` на `"active"` |
-| 24 | 265 | `temperature` (воздух, текущая, /10) | сверено напрямую с приложением: 26.5°C |
-| **101** | **250** | **`floor_temperature`** (пол, текущая, /10) | Проверено 2026-08-04: живой дамп RT6 (`'24':256,'101':250`) сверен один в один со скриншотом HA в тот же момент ("T° воздуха 25.6°C", "T° пола 25.0°C") - оба числа совпали разом |
-| **106** | **740** | **`humidity_value`** | Проверено 2026-08-04: дамп RT6 (`'106':740`) совпадает со скриншотом HA "Влажность: 74.0%" |
-| 103 | "0x8041" | `adaptation_runstatus` | формат совпадает, код делает `int(value) & 0x01` / `& 0x02` / `& 0x04` |
-| 111 | "Manual" | `setpointchangesource` | код сравнивает `== "Manual"` буквально |
-Проверено 2026-08-04: режим переключён на
-"В отсутствии" - `DP 2` показал `"leaving_home"` (точное совпадение), а
-**DP 127 вообще пропал из статуса** (не пришёл в ответе). Значит `DP 2 =
-mode` - правильное поле, а DP127 - случайный/нестабильный артефакт, не
-используется для этого. DP127 не используется.
+| 3 | "Heat"/"heat_active" | `work_state` | exact match with the enum in climate.py; confirmed 2026-08-04 by a live "Heat" to "heat_active" transition when active heating started |
+| **140** | **"Inactive" to "active"** | **`output_status`** (thermal actuator) | Checked 2026-08-04: RT6 target raised to 32.5C (above current), the actuator in the app showed "Open" - DP140 flipped at that exact moment from `"Inactive"` to `"active"` |
+| 24 | 265 | `temperature` (air, current, /10) | cross-checked directly with the app: 26.5C |
+| **101** | **250** | **`floor_temperature`** (floor, current, /10) | Checked 2026-08-04: live RT6 dump (`'24':256,'101':250`) matched one-for-one against the HA screenshot at that moment ("Air T 25.6C", "Floor T 25.0C") - both numbers matched at once |
+| **106** | **740** | **`humidity_value`** | Checked 2026-08-04: RT6 dump (`'106':740`) matches the HA screenshot "Humidity: 74.0%" |
+| 103 | "0x8041" | `adaptation_runstatus` | format matches, the code does `int(value) & 0x01` / `& 0x02` / `& 0x04` |
+| 111 | "Manual" | `setpointchangesource` | the code compares `== "Manual"` literally |
 
-## Уставки по режимам - подтверждено живым тестом (2026-08-04, RT6)
+Checked 2026-08-04: the mode was switched to "Away" - `DP 2` showed
+`"leaving_home"` (exact match), while **DP 127 disappeared from the status
+entirely** (not present in the reply). So `DP 2 = mode` is the right field,
+and DP127 is a random/unstable artefact, not used for this. DP127 is unused.
 
-В приложении разом изменены три уставки на RT6 (Дома 22.0→22.5,
-В отсутствии 19.0→19.5, Пауза 5.0→5.5) - снят живой статус через `cid` и
-сверен. Каждая уставка хранится **не в одном DP, а в
-нескольких синхронных копиях** (меняются вместе при любом изменении):
+## Per-mode setpoints - confirmed by live test (2026-08-04, RT6)
 
-| Уставка | Значение | DP (все меняются синхронно) |
+Three setpoints were changed at once on RT6 in the app (Home 22.0 to 22.5,
+Away 19.0 to 19.5, Pause 5.0 to 5.5) - live status was taken via `cid` and
+cross-checked. Each setpoint is stored **not in one DP but in several
+synchronized copies** (they change together on any change):
+
+| Setpoint | Value | DP (all change together) |
 |---|---|---|
-| Дома (`at_home_setting`) | 22.5°C → raw 225 | **16, 113, 118** |
-| В отсутствии (`leaving_home_setting`) | 19.5°C → raw 195 | **109, 112, 119** |
-| Пауза (`pause_setting`) | 5.5°C → raw 55 | **110, 114, 120** |
+| Home (`at_home_setting`) | 22.5C, raw 225 | **16, 113, 118** |
+| Away (`leaving_home_setting`) | 19.5C, raw 195 | **109, 112, 119** |
+| Pause (`pause_setting`) | 5.5C, raw 55 | **110, 114, 120** |
 
-Для чтения в HA не важно, какой конкретно DP из группы использовать - они
-всегда синхронны. Для записи пока не проверено, какой из копий является
-"каноничным" полем, на которое реально нужно слать команду (возможно любой,
-возможно только один, а остальные - производные/зеркала для разных
-внутренних структур типа расписания).
+For reading in HA it does not matter which DP of a group you use - they are
+always in sync. For writing it is not yet verified which copy is the
+"canonical" field that a command actually needs to go to (possibly any,
+possibly only one, with the rest being derived/mirror copies for various
+internal structures like the schedule).
 
-Заодно железно подтвердилось: **DP 111 = `setpointchangesource`** - было
-`"Manual"`, после правки через приложение стало `"Externally"`. Значение
-буквально описывает источник последнего изменения (вручную на термостате vs
-удалённо) - семантически именно то поле.
+This also firmly confirmed: **DP 111 = `setpointchangesource`** - it was
+`"Manual"`, and after a change through the app it became `"Externally"`. The
+value literally describes the source of the last change (manually on the
+thermostat vs remotely) - semantically exactly that field.
 
-## "Отдых" (Holiday) - архитектурно не такой же пресет, как Дома/Отсутствие/Пауза
+## Holiday - architecturally NOT the same kind of preset as Home/Away/Pause
 
-Живой тест (2026-08-04, все 6 RT разом): термостаты привязаны к комнатам,
-снята пауза, применено "Отдых → В отсутствии → Сейчас" с температурой
-16.5°C. Результат - `165` появилось в DP **115** и **121** синхронно на всех
-6 термостатах.
+Live test (2026-08-04, all 6 RTs at once): thermostats bound to rooms, pause
+lifted, "Holiday to Away to Now" applied with 16.5C. Result - `165` appeared in
+DP **115** and **121** synchronously on all 6 thermostats.
 
-Важный нюанс: DP **114**, который в предыдущем тесте выглядел как часть
-группы "Пауза" (110/114/120=55), **тоже изменился на 165** (кроме RT3, где
-не успел - задержка обновления, ожидаемо). А вот DP 110 и 120 остались на 55
-без изменений.
+Important detail: DP **114**, which in the previous test looked like part of
+the "Pause" group (110/114/120=55), **also changed to 165** (except RT3, which
+did not catch up - update lag, expected). But DP 110 and 120 stayed at 55
+unchanged.
 
-Проверено 2026-08-04:
-После выхода из Holiday и переключения RT6 на `leaving_home` (19.5°C):
-- **DP 114 → изменился на `195`** (подстроился под новый активный режим)
-- **DP 115 и DP 121 → остались `165`** (не изменились, хотя Holiday уже не активен!)
+Checked 2026-08-04:
+After leaving Holiday and switching RT6 to `leaving_home` (19.5C):
+- **DP 114 changed to `195`** (adjusted to the new active mode)
+- **DP 115 and DP 121 stayed `165`** (unchanged, even though Holiday is no
+  longer active)
 
-Это и есть изоляция: **DP 114 = "текущая активная уставка"** (живой указатель
-на значение того режима, что сейчас реально действует - 55 при Паузе, 195
-при leaving_home, 165 при Holiday). **DP 115 и DP 121 = настоящий
-`holiday_setting`** - устойчивый регистр, не сбрасывается при смене режима,
-хранит заданную Holiday-температуру независимо от того, что активно сейчас.
-(115 и 121 - по-прежнему две синхронные копии одного и того же поля.)
+That is the isolation: **DP 114 = "currently active setpoint"** (a live
+pointer to the value of whichever mode is actually in effect right now - 55
+during Pause, 195 during leaving_home, 165 during Holiday). **DP 115 and DP
+121 = the real `holiday_setting`** - a stable register, not reset when the
+mode changes, holding the set Holiday temperature regardless of what is active
+now. (115 and 121 are still two synchronized copies of the same field.)
 
-## DP 1 = переключатель Pre-heat (найдено из исходников switch.py, не угадыванием)
+## DP 1 = the Pre-heat toggle (found from switch.py source, not by guessing)
 
 `custom_components/danfoss_ally/switch.py`:
 
@@ -114,39 +116,39 @@ DanfossAllySwitchDescription(
 )
 ```
 
-Т.е. Danfoss-облако читает/пишет поле с именем `switch` (сырой DP **1**) как
-"включён ли предварительный нагрев для этого термостата" - это не общее
-вкл/выкл устройства (у контура тёплого пола нет физического "выключения" в
-привычном смысле, поэтому generic-поле Tuya было переиспользовано под
-Pre-heat). Подтверждено живым тестом: Pre-heat выключен в HA →
-DP1 стал `False` (был `True` во всех прошлых дампах).
+So the Danfoss cloud reads/writes a field named `switch` (raw DP **1**) as
+"whether pre-heating is enabled for this thermostat" - this is not a general
+device on/off (a floor-heating loop has no physical "off" in the usual sense,
+so the Tuya generic field was repurposed for Pre-heat). Confirmed by live
+test: Pre-heat turned off in HA, DP1 became `False` (it was `True` in all
+prior dumps).
 
-В том же `switch.py` нашлись имена ещё нескольких переключателей - DP-номера
-(изначально их DP искал среди 106/117/123-141 - см. ниже, вывод: этих полей
-физически нет на Icon2 RT).
+The same `switch.py` had the names of a few more toggles - their DP numbers
+were initially searched among 106/117/123-141 (see below, conclusion: those
+fields physically do not exist on Icon2 RT).
 
-## Поля, которых НЕТ на Icon2 RT (только на Ally-радиаторах)
+## Fields that do NOT exist on Icon2 RT (only on Ally radiators)
 
-По `writable-properties-research.md`: у автора библиотеки было два тестовых
-аккаунта - один с Ally-радиаторами, один с Icon2 RT (та же модель). Их
-списки наблюдаемых полей разные. Следующие поля встречаются только в
-Ally-радиаторном аккаунте и отсутствуют в списке для Icon2 RT - значит их
-физически нет в данных, которые отдаёт это железо, и искать под них DP
-бессмысленно:
+Per `writable-properties-research.md`: the library author had two test
+accounts - one with Ally radiators, one with Icon2 RT (the same model). Their
+lists of observed fields are different. The following fields appear only in the
+Ally radiator account and are absent from the Icon2 RT list - meaning they
+physically are not in the data this hardware reports, and searching for their
+DP is pointless:
 
 `load_balance_enable`, `radiator_covered`, `heat_available`,
 `window_toggle`, `window_state_info`, `mounting_mode_active`, `ctrl_alg`,
 `valve_opening`, `load_room_mean`, `OccupiedSetpoint`, `pi_heating_demand`.
 
-## Известные названия полей без подтверждённого DP-номера
+## Known field names without a confirmed DP number
 
-Полный официально подтверждённый список для Icon2 RT (из
-`writable-properties-research.md`, живое тестирование против настоящего
-Danfoss API) - с пометкой read-only/writable оттуда же:
+The full officially confirmed list for Icon2 RT (from
+`writable-properties-research.md`, live testing against the real Danfoss API) -
+with read-only/writable marked from there too:
 
-| Поле (имя в облаке) | R/W | DP найден? |
+| Field (cloud name) | R/W | DP found? |
 |---|---|---|
-| `switch` | writable | DP 1 (это pre_heat, не общий power) |
+| `switch` | writable | DP 1 (this is pre_heat, not general power) |
 | `mode` | writable | DP 2 |
 | `work_state` | **read-only** | DP 3 |
 | `temp_set` | writable | DP 16 |
@@ -157,36 +159,36 @@ Danfoss API) - с пометкой read-only/writable оттуда же:
 | `battery_percentage` | **read-only** | DP 34 |
 | `fault` | **read-only** | DP 45 |
 | `SetpointChangeSource` | **read-only** | DP 111 |
-| `manual_mode_fast` | writable | не найден - по аналогии с holiday, вероятно тоже отдельный устойчивый регистр среди ещё не сопоставленных (102,117,123,124,126,128,129,130,135,137,139,141) |
-| `at_home_setting` | writable | DP 16/113/118 (группа) |
-| `leaving_home_setting` | writable | DP 109/112/119 (группа) |
-| `pause_setting` | writable | DP 110/120 (группа) |
-| `holiday_setting` | writable | DP 115/121 (группа) |
-| "текущая активная уставка" (то, что climate.py вычисляет через `_get_setpoint_for_mode`) | - | DP 114 |
-| `switch_state` | writable | не найден - вместе с `switch` формирует статус `pre_heating`; не поймать, пока `switch`(pre_heat)=false, нужен повторный тест с включённым pre_heat |
-| `floor_temperature` (`MeasuredValue`/`floor_sensor` в сыром API) | **read-only** | DP 101 |
+| `manual_mode_fast` | writable | not found - by analogy with holiday, probably also a separate stable register among the not-yet-mapped ones (102,117,123,124,126,128,129,130,135,137,139,141) |
+| `at_home_setting` | writable | DP 16/113/118 (group) |
+| `leaving_home_setting` | writable | DP 109/112/119 (group) |
+| `pause_setting` | writable | DP 110/120 (group) |
+| `holiday_setting` | writable | DP 115/121 (group) |
+| "currently active setpoint" (what climate.py computes via `_get_setpoint_for_mode`) | - | DP 114 |
+| `switch_state` | writable | not found - together with `switch` it forms the `pre_heating` status; cannot be caught while `switch`(pre_heat)=false, needs a re-test with pre_heat on |
+| `floor_temperature` (`MeasuredValue`/`floor_sensor` in the raw API) | **read-only** | DP 101 |
 | `humidity_value` | **read-only** | DP 106 |
-| `temp_mode` | **read-only** | не найден |
-| `output_status` (термоактуатор) | **read-only** | **DP 140** - подтверждено 2026-08-04, значение `"Inactive"`/`"active"` |
-| `system_status_water` | **read-only** | не найден |
+| `temp_mode` | **read-only** | not found |
+| `output_status` (thermal actuator) | **read-only** | **DP 140** - confirmed 2026-08-04, value `"Inactive"`/`"active"` |
+| `system_status_water` | **read-only** | not found |
 
-## Итог
+## Summary
 
-Полный подтверждённый набор: `switch`=pre_heat (1), `mode` (2), `work_state`
-(3), `temperature`/воздух (24), `floor_temperature`/пол (101),
-`humidity_value` (106), "активная уставка" (114), `at_home_setting`
-(16/113/118), `leaving_home_setting` (109/112/119), `pause_setting`
-(110/120), `holiday_setting` (115/121), `upper_temp` (18), `lower_temp`
-(27), `child_lock` (30), `battery_percentage` (34), `fault` (45),
+Full confirmed set: `switch`=pre_heat (1), `mode` (2), `work_state` (3),
+`temperature`/air (24), `floor_temperature`/floor (101), `humidity_value`
+(106), "active setpoint" (114), `at_home_setting` (16/113/118),
+`leaving_home_setting` (109/112/119), `pause_setting` (110/120),
+`holiday_setting` (115/121), `upper_temp` (18), `lower_temp` (27),
+`child_lock` (30), `battery_percentage` (34), `fault` (45),
 `adaptation_runstatus` (103), `setpointchangesource` (111), `output_status`/
-термоактуатор (140).
+thermal actuator (140).
 
-Не хватает только `switch_state` и `manual_mode_fast` (оба существуют на
-Icon2 RT по документу pydanfossally, просто не пойманы в тестах) и
-`heat_supply_request` (есть в коде mtrab, но не упомянут ни в одном из двух
-списков research-документа - не ясно, существует ли на Icon2 RT вообще).
-Остальное из прошлых версий этого раздела (`mounting_mode_active`,
+The only ones missing are `switch_state` and `manual_mode_fast` (both exist on
+Icon2 RT per the pydanfossally doc, just not caught in the tests) and
+`heat_supply_request` (present in mtrab's code but not mentioned in either of
+the research doc's two lists - unclear whether it exists on Icon2 RT at all).
+The rest from earlier versions of this section (`mounting_mode_active`,
 `ctrl_alg`, `radiator_covered`, `heat_available`, `load_balance_enable`,
-`window_toggle`) - см. раздел выше, подтверждено что их нет на этой модели.
-Ничего из оставшегося не блокирует сборку конфига - это чисто
-диагностические поля, не влияющие на управление.
+`window_toggle`) - see the section above, confirmed absent on this model.
+Nothing left over blocks building the config - these are purely diagnostic
+fields that do not affect control.

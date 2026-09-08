@@ -1,106 +1,110 @@
-# Извлечение Tuya local_key из приложения Danfoss Ally
+*[Русская версия](LOCAL_KEY_EXTRACTION_METHOD.ru.md)*
 
-Как получить `local_key` шлюза Danfoss Ally Gateway для локального
-управления по Tuya-протоколу. Без реверс-инжиниринга нативного крипто-кода
-и без необходимости заставлять приложение отправлять команды.
+# Extracting the Tuya local_key from the Danfoss Ally app
 
-## Что именно нужно добыть
+How to obtain the `local_key` of a Danfoss Ally Gateway for local control over
+the Tuya protocol. No reverse engineering of the native crypto code, and no
+need to make the app send a command.
+
+## What you actually need
 
 ```
 device_id: <GATEWAY_DEVICE_ID>   (Danfoss Ally Gateway)
-local_key: <GATEWAY_LOCAL_KEY>   (16 символов, ASCII, как есть, не hex)
+local_key: <GATEWAY_LOCAL_KEY>   (16 characters, ASCII, as-is, not hex)
 ```
 
-Термостаты Icon2 RT и Icon2 Controller отдельных `local_key` не имеют и не
-требуют. Это Zigbee-суб-устройства под шлюзом (в их JSON-записи
-`"communicationNode":"<GATEWAY_DEVICE_ID>"`, `"devAttribute":2048`), и
-локально они адресуются через ключ шлюза плюс свой `nodeId` (он же `cid`,
-он же `device_cid` в tuya_local). Один ключ на всю систему.
+The Icon2 RT thermostats and the Icon2 Controller have no separate `local_key`
+and do not need one. They are Zigbee sub-devices behind the gateway (their
+JSON record carries `"communicationNode":"<GATEWAY_DEVICE_ID>"` and
+`"devAttribute":2048`), and locally they are addressed with the gateway's key
+plus their own `nodeId` (also called `cid`, or `device_cid` in tuya_local).
+One key for the whole system.
 
-`nodeId` всех суб-устройств приходит в поле `deviceTopo` вместе с обычным
-списком устройств, то есть открывать карточку каждого термостата не нужно.
-Достаточно один раз открыть карточку шлюза.
+The `nodeId` of every sub-device arrives in the `deviceTopo` field alongside
+the normal device list, so you do not need to open each thermostat's card.
+Opening the gateway's card once is enough.
 
-Нумерация RT в приложении не совпадает с суффиксом `nodeId`. Суффикс `-01`,
-`-02`, ... это порядок Zigbee-сопряжения, а не номер термостата. Брать
-строго из дампа.
+The RT numbering in the app does not match the `nodeId` suffix. The `-01`,
+`-02`, ... suffix is the Zigbee pairing order, not the thermostat number. Take
+it strictly from the dump.
 
-| Устройство | device_id | cid (nodeId) |
+| Device | device_id | cid (nodeId) |
 |---|---|---|
-| Ally Gateway | `<GATEWAY_DEVICE_ID>` | нет (шлюз не добавляется отдельным устройством, у него нет DPS) |
+| Ally Gateway | `<GATEWAY_DEVICE_ID>` | none (the gateway is not added as its own device, it has no DPS) |
 | Icon2 Controller | `<ICON2_CONTROLLER_DEVICE_ID>` | `<ZIGBEE_BASE_NODE_ID>` |
 | Icon2 RT | `<RTn_DEVICE_ID>` | `<ZIGBEE_BASE_NODE_ID>-0N` |
 
-Для всех записей `host = <GATEWAY_LAN_IP>`, `local_key = <GATEWAY_LOCAL_KEY>`,
+For every record `host = <GATEWAY_LAN_IP>`, `local_key = <GATEWAY_LOCAL_KEY>`,
 `protocol_version = 3.5`.
 
-## Где лежит ключ и почему его нельзя просто прочитать с диска
+## Where the key lives and why you cannot just read it off disk
 
-- MMKV-хранилища приложения (`/data/data/com.danfoss.ally/files/thingmmkv/`)
-  зашифрованы (энтропия около 8 бит/байт). Пассивное чтение диска без
-  запущенного приложения ключ не даёт.
-- `RKStorage` (React Native AsyncStorage, SQLite) и `shared_prefs/*.xml`
-  ключа не содержат.
-- В расшифрованном виде ключ существует только в оперативной памяти
-  работающего процесса, внутри JSON-записи устройства из локального кэша
-  Tuya SDK (поле `"localKey":"..."`).
+- The app's MMKV stores (`/data/data/com.danfoss.ally/files/thingmmkv/`) are
+  encrypted (entropy around 8 bits/byte). Passively reading the disk without a
+  running app does not give you the key.
+- `RKStorage` (React Native AsyncStorage, SQLite) and `shared_prefs/*.xml` do
+  not contain the key.
+- In decrypted form the key only exists in the RAM of the running process,
+  inside the device's JSON record from the Tuya SDK's local cache (the
+  `"localKey":"..."` field).
 
-Изначально казалось, что ключ появляется в памяти только в момент
-отправки команды устройству (нативный вызов `mbedtls_aes_setkey_enc/dec` в
-`libmbedcrypto.so`), а отправка команды стабильно роняла приложение на
-x86-эмуляторе (APK несёт только `arm64-v8a`/`armeabi-v7a`, работает через
-транслятор `libhoudini.so`). На деле `localKey` подгружается в модель
-устройства уже при простом открытии карточки устройства, без нажатия
-кнопок управления. Хук на AES и краш-путь не нужны.
+It first looked as if the key only appears in memory the moment a command is
+sent to the device (the native `mbedtls_aes_setkey_enc/dec` call in
+`libmbedcrypto.so`), and sending a command reliably crashed the app on the
+x86 emulator (the APK ships only `arm64-v8a`/`armeabi-v7a`, running through the
+`libhoudini.so` translator). In fact `localKey` is loaded into the device
+model just by opening the device card, without pressing any control. The AES
+hook and the crash path are not needed.
 
-## Предпосылки
+## Prerequisites
 
-- Рутованный Android с установленным и залогиненным `com.danfoss.ally`.
-  Подходит x86-эмулятор (использовался LDPlayer) или реальный телефон.
-- `adb` с root-доступом (`adb shell su -c ...` работает).
-- `frida-server` на устройстве, запущен от root
+- A rooted Android with `com.danfoss.ally` installed and logged in. An x86
+  emulator (LDPlayer was used) or a real phone both work.
+- `adb` with root access (`adb shell su -c ...` works).
+- `frida-server` on the device, started as root
   (`su -c '/data/local/tmp/frida-server &'`).
-- На хосте `pip install frida`. Мажорная версия клиента должна совпадать с
-  версией `frida-server` (использовалась 17.x).
+- On the host, `pip install frida`. The client major version must match the
+  `frida-server` version (17.x was used).
 
-## Метод
+## Method
 
-1. Запустить приложение, дождаться, пока список устройств загрузится и
-   покажет живые данные (актуальные температуры, а не пустые плитки).
+1. Start the app and wait until the device list has loaded and shows live data
+   (real temperatures, not empty tiles).
    ```
    adb shell am start -n com.danfoss.ally/com.smart.ThingSplashActivity
    ```
-2. Открыть карточку шлюза (тап по плитке в списке). Это триггер подгрузки
-   его `localKey` в память. Внутри карточки ничего не нажимать.
-3. Найти PID процесса.
+2. Open the gateway's card (tap its tile in the list). That is the trigger
+   that loads its `localKey` into memory. Do not press anything inside the
+   card.
+3. Find the process PID.
    ```
    adb shell su -c 'ps -A' | grep danfoss
    ```
-   Нужен основной процесс (`Ally` / `com.danfoss.ally`), не `:monitor`. Это
-   отдельный дочерний процесс без нужных данных.
-4. Подключиться Frida по PID (не по имени пакета, у Frida процесс виден как
-   `Ally`), просканировать память процесса по всем `r--`/`rw-` регионам на
-   строку `"localKey":"` (или на известный `device_id`) и для каждого
-   совпадения выгрузить несколько килобайт окружающего текста. Там лежит
-   целиком JSON-запись устройства, включая `devId`, `localKey` и
-   `deviceTopo` с `nodeId` суб-устройств.
-5. Отфильтровать совпадения. Значение `localKey` рядом с `devId` шлюза
-   и есть искомый ключ. Записи с самореферентными значениями
-   (`"devId":"devId"`) это фрагменты JSON-схемы, их пропускать.
+   You want the main process (`Ally` / `com.danfoss.ally`), not `:monitor`.
+   That is a separate child process without the data you need.
+4. Attach Frida by PID (not by package name; Frida sees the process as
+   `Ally`), scan the process memory across all `r--`/`rw-` regions for the
+   string `"localKey":"` (or for a known `device_id`), and for every match dump
+   a few kilobytes of surrounding text. That is where the full device JSON
+   record sits, including `devId`, `localKey`, and `deviceTopo` with the
+   sub-devices' `nodeId`.
+5. Filter the matches. The `localKey` value next to the gateway's `devId` is
+   the key you want. Records with self-referential values (`"devId":"devId"`)
+   are JSON-schema fragments, skip them.
 
-В новых версиях Frida чтение памяти делается методом указателя
-`ptr.readByteArray(len)`. `Memory.readByteArray()` устарел и падает с
-`TypeError: not a function`.
+On recent Frida, memory is read with the pointer method
+`ptr.readByteArray(len)`. `Memory.readByteArray()` is deprecated and fails
+with `TypeError: not a function`.
 
-## Проверка ключа
+## Verifying the key
 
-Ключ подтверждается двумя независимыми способами.
+The key is confirmed two independent ways.
 
-1. Криптографически. На протоколе 3.5 сессионный handshake (согласование
-   session key через зашифрованный ключом обмен nonce) завершается
-   успешно ("Session key negotiate success!"). С неверным ключом
-   расшифровка nonce даёт мусор и handshake падает сразу.
-2. Функционально. Живой статус суб-устройства через шлюз:
+1. Cryptographically. On protocol 3.5 the session handshake (negotiating the
+   session key through a key-encrypted nonce exchange) completes ("Session key
+   negotiate success!"). With a wrong key the nonce decryption yields garbage
+   and the handshake fails immediately.
+2. Functionally. Live status of a sub-device through the gateway:
    ```python
    import tinytuya
    gw = tinytuya.Device(GATEWAY_ID, IP, LOCAL_KEY, version=3.5)
@@ -108,27 +112,26 @@ x86-эмуляторе (APK несёт только `arm64-v8a`/`armeabi-v7a`, �
                          cid=RT_NODE_ID, parent=gw)
    sub.status()  # -> {'dps': {...}, 'cid': RT_NODE_ID, ...}
    ```
-   В ответе `"24"` (температура воздуха, /10) и `"34"` (батарея, %)
-   должны совпасть с тем, что показывает приложение.
+   In the reply `"24"` (air temperature, /10) and `"34"` (battery, %) should
+   match what the app shows.
 
-Важно. Сам шлюз на `status()` без `cid` отвечает
-`{'Error': 'Invalid JSON Response from Device', 'Err': '900', ...}`. Это не
-ошибка ключа, сессия при этом устанавливается нормально. У шлюза нет
-собственных DPS (`"dps":{}` в его записи, пустой `statusSchemaList`), это
-чистый мост. Запрашивать нужно суб-устройство с его `cid`.
+Note. The gateway itself replies to `status()` without a `cid` with
+`{'Error': 'Invalid JSON Response from Device', 'Err': '900', ...}`. That is
+not a key error, the session establishes fine. The gateway has no DPS of its
+own (`"dps":{}` in its record, an empty `statusSchemaList`), it is a pure
+bridge. You have to query a sub-device with its `cid`.
 
-Если в Home Assistant уже стоит tuya_local (проект make-all/tuya-local, не
-путать с LocalTuya от rospogrigio), у его ручной формы добавления есть поле
-`device_cid`. Каждый термостат добавляется как `device_id` + `host` +
-`local_key` шлюза + `protocol_version=3.5` + свой `device_cid`. Шлюз
-отдельным устройством не добавлять.
+If Home Assistant already has tuya_local (the make-all/tuya-local project, not
+rospogrigio's LocalTuya), its manual add form has a `device_cid` field. Each
+thermostat is added as `device_id` + `host` + the gateway's `local_key` +
+`protocol_version=3.5` + its own `device_cid`. Do not add the gateway as its
+own device.
 
-## Грабли
+## Gotchas
 
-- Процесс приложения может падать между запусками сканирования
+- The app process can die between scan runs
   (`frida.NotSupportedError: unable to write to process memory: No such
-  process` при живом PID в `ps`). Обычно помогает повторный запуск
-  сканирования, со второй попытки проходит.
-- Если после подключения Frida приложение умирает, перезапустить его,
-  снова открыть карточку шлюза и повторить. Данные в памяти появляются
-  заново после открытия карточки.
+  process` while the PID is still live in `ps`). Re-running the scan usually
+  works, it goes through on the second try.
+- If the app dies after Frida attaches, restart it, open the gateway's card
+  again and retry. The data reappears in memory once the card is open.

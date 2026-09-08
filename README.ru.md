@@ -53,9 +53,9 @@
    и впиши свои `local_key` шлюза, его device_id, IP в локальной сети, и
    `device_id`/`cid` каждого RT (см. блок выше). Как и почему это вообще
    работает - см.
-   [`docs/LOCAL_KEY_EXTRACTION_METHOD.md`](docs/LOCAL_KEY_EXTRACTION_METHOD.md);
+   [`docs/LOCAL_KEY_EXTRACTION_METHOD.ru.md`](docs/LOCAL_KEY_EXTRACTION_METHOD.ru.md);
    как сопоставлялись номера датапоинтов - см.
-   [`docs/RT1_DP_MAPPING.md`](docs/RT1_DP_MAPPING.md) (пригодится, если у
+   [`docs/RT1_DP_MAPPING.ru.md`](docs/RT1_DP_MAPPING.ru.md) (пригодится, если у
    твоего устройства DP отличаются).
 3. Перезапусти Home Assistant.
 4. Настройки → Устройства и сервисы → Добавить интеграцию → "Danfoss Icon2".
