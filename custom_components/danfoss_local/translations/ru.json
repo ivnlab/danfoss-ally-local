@@ -38,7 +38,17 @@
           "schedule": "Расписание"
         }
       },
-      "adaptation_run_status": { "name": "Статус адаптации" }
+      "adaptation_run_status": { "name": "Статус адаптации" },
+      "schedule": {
+        "name": "Расписание",
+        "state": {
+          "at_home": "Дома",
+          "leaving_home": "Вне дома",
+          "pause": "Пауза",
+          "holiday": "Отпуск",
+          "off": "Выкл"
+        }
+      }
     },
     "binary_sensor": {
       "thermal_actuator": { "name": "Термоголовка" },

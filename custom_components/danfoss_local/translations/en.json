@@ -38,7 +38,17 @@
           "schedule": "Schedule"
         }
       },
-      "adaptation_run_status": { "name": "Adaptation run status" }
+      "adaptation_run_status": { "name": "Adaptation run status" },
+      "schedule": {
+        "name": "Schedule",
+        "state": {
+          "at_home": "Home",
+          "leaving_home": "Away",
+          "pause": "Pause",
+          "holiday": "Holiday",
+          "off": "Off"
+        }
+      }
     },
     "binary_sensor": {
       "thermal_actuator": { "name": "Thermal actuator" },

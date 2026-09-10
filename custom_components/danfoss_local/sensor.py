@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import DanfossLocalCoordinator
@@ -98,14 +99,21 @@ async def async_setup_entry(
     """Set up Danfoss Icon2 (Local) sensor entities."""
     coordinator: DanfossLocalCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    def _build_entities(coordinator: DanfossLocalCoordinator) -> list[DanfossLocalSensor]:
+    def _build_entities(coordinator: DanfossLocalCoordinator) -> list[SensorEntity]:
         # Fixed entity set per thermostat - see number.py for why creation is
         # not gated on the key already being present in the device data.
-        return [
+        entities: list[SensorEntity] = [
             DanfossLocalSensor(coordinator, device_id, description)
             for device_id in (coordinator.data or {})
             for description in SENSORS
         ]
+        # One schedule sensor per thermostat, fed by the schedule manager
+        # rather than by polled device data.
+        entities.extend(
+            DanfossLocalScheduleSensor(coordinator, device_id)
+            for device_id in (coordinator.data or {})
+        )
+        return entities
 
     async_setup_dynamic_platform_entities(coordinator, async_add_entities, _build_entities)
 
@@ -133,3 +141,68 @@ class DanfossLocalSensor(DanfossLocalEntity, SensorEntity):
             return self.entity_description.value_fn(self.device)
         except (KeyError, TypeError):
             return None
+
+
+SCHEDULE_STATE_OFF = "off"
+SCHEDULE_STATES = ["at_home", "leaving_home", "pause", "holiday", SCHEDULE_STATE_OFF]
+
+
+class DanfossLocalScheduleSensor(DanfossLocalEntity, SensorEntity):
+    """What the local weekly schedule wants right now, plus the program itself.
+
+    State is the scheduled mode at this minute ("off" when no schedule or
+    disabled). The full program, holiday overlay and next transition are
+    exposed as attributes for the dashboard card to render and edit through
+    the danfoss_local.* schedule services.
+    """
+
+    _attr_translation_key = "schedule"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = SCHEDULE_STATES
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator: DanfossLocalCoordinator, device_id: str) -> None:
+        """Initialize the schedule sensor."""
+        super().__init__(coordinator, device_id)
+        self._attr_unique_id = f"schedule_{device_id}_danfoss_local"
+
+    @property
+    def _manager(self):
+        return getattr(self.coordinator, "schedule_manager", None)
+
+    async def async_added_to_hass(self) -> None:
+        """Also refresh whenever the schedule manager changes or ticks."""
+        await super().async_added_to_hass()
+        manager = self._manager
+        if manager is not None:
+            self.async_on_remove(manager.async_add_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self) -> str:
+        """Return the scheduled mode for this minute, or off."""
+        manager = self._manager
+        if manager is None:
+            return SCHEDULE_STATE_OFF
+        sched = manager.engine.get_schedule(self._device_id)
+        if sched is None or not sched.enabled:
+            return SCHEDULE_STATE_OFF
+        return sched.desired_mode(dt_util.now()) or SCHEDULE_STATE_OFF
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose program, holiday, enabled flag and next transition."""
+        manager = self._manager
+        if manager is None:
+            return {}
+        sched = manager.engine.get_schedule(self._device_id)
+        if sched is None:
+            return {"enabled": False, "program": None, "holiday": None, "next_change_at": None, "next_mode": None}
+        nxt = manager.engine.next_change(self._device_id, dt_util.now())
+        data = sched.to_dict()
+        return {
+            "enabled": data["enabled"],
+            "program": data["program"],
+            "holiday": data["holiday"],
+            "next_change_at": nxt[0].isoformat() if nxt else None,
+            "next_mode": nxt[1] if nxt else None,
+        }

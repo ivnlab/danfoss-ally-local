@@ -1,0 +1,110 @@
+set_schedule:
+  name: Set weekly schedule
+  description: Replace a thermostat's weekly program (7 days, Mon..Sun). Periods are half-open HH:MM ranges pinned to a preset mode; minutes outside every period use default_mode.
+  fields:
+    device_id:
+      name: Device
+      description: HA device id of the thermostat (or its raw Tuya device_id).
+      required: true
+      selector:
+        device:
+          integration: danfoss_local
+    program:
+      name: Program
+      description: '{"default_mode": "leaving_home", "days": [[{"start": "06:00", "end": "08:00", "mode": "at_home"}], [], [], [], [], [], []]}'
+      required: true
+      selector:
+        object:
+    enabled:
+      name: Enabled
+      description: Leave the schedule enabled/disabled after saving (unchanged if omitted).
+      required: false
+      selector:
+        boolean:
+
+clear_schedule:
+  name: Clear weekly schedule
+  description: Remove the thermostat's program entirely (HA stops driving it).
+  fields:
+    device_id:
+      name: Device
+      required: true
+      selector:
+        device:
+          integration: danfoss_local
+
+copy_schedule:
+  name: Copy schedule to other thermostats
+  description: Copy one thermostat's weekly program to the given targets (all thermostats if targets is omitted). Holidays and enabled flags of the targets are kept.
+  fields:
+    device_id:
+      name: Source device
+      required: true
+      selector:
+        device:
+          integration: danfoss_local
+    targets:
+      name: Target devices
+      required: false
+      selector:
+        device:
+          multiple: true
+          integration: danfoss_local
+
+set_holiday:
+  name: Set holiday
+  description: Overlay a date range (inclusive) during which the thermostat is held in the given mode instead of the weekly program.
+  fields:
+    device_id:
+      name: Device
+      required: true
+      selector:
+        device:
+          integration: danfoss_local
+    start:
+      name: Start date
+      required: true
+      selector:
+        date:
+    end:
+      name: End date
+      required: true
+      selector:
+        date:
+    mode:
+      name: Mode
+      required: false
+      default: holiday
+      selector:
+        select:
+          options:
+            - holiday
+            - at_home
+            - leaving_home
+            - pause
+
+clear_holiday:
+  name: Clear holiday
+  fields:
+    device_id:
+      name: Device
+      required: true
+      selector:
+        device:
+          integration: danfoss_local
+
+enable_schedule:
+  name: Enable or disable schedule
+  description: Pause the weekly program without deleting it.
+  fields:
+    device_id:
+      name: Device
+      required: true
+      selector:
+        device:
+          integration: danfoss_local
+    enabled:
+      name: Enabled
+      required: true
+      selector:
+        boolean:
