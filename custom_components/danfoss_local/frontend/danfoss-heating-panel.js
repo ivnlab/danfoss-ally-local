@@ -267,14 +267,12 @@ class DanfossHeatingPanel extends HTMLElement {
   }
 
   _progOf(r) { if (!this._dirty[r.devId]) { this._prog[r.devId] = clone(r.program); this._dirty[r.devId] = true; } return this._prog[r.devId]; }
-  _queueSave(r) {
-    clearTimeout(this._saveT[r.devId]);
-    this._saveT[r.devId] = setTimeout(async () => {
-      const days = this._prog[r.devId].map((d) => [...d].sort((a, b) => a[0] - b[0]).map((w) => ({ start: m2t(w[0]), end: m2t(w[1]) })));
-      await this._svc("set_schedule", { device_id: r.devId, program: { days }, enabled: r.hasProgram ? undefined : true }, "Расписание сохранено");
-      this._sig = ""; this._render();
-    }, 700);
+  async _saveProgram(r) {
+    const days = this._prog[r.devId].map((d) => [...d].sort((a, b) => a[0] - b[0]).map((w) => ({ start: m2t(w[0]), end: m2t(w[1]) })));
+    await this._svc("set_schedule", { device_id: r.devId, program: { days }, enabled: r.hasProgram ? undefined : true }, "Расписание сохранено и применено");
+    this._sig = ""; this._render();
   }
+  _discardProgram(r) { this._dirty[r.devId] = false; delete this._prog[r.devId]; this._s.edit = null; }
 
   _toast(msg) { const t = this.shadowRoot.querySelector(".toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(this._tt); this._tt = setTimeout(() => t.classList.remove("show"), 2500); }
 
@@ -538,6 +536,7 @@ class DanfossHeatingPanel extends HTMLElement {
         ${days}
         <div class="muted" style="font-size:12px;margin:4px 0 0 40px">Потяните за края окна, чтобы изменить время (сетка 30 минут), или нажмите на окно для точной правки.</div>
         ${editor}
+        ${this._dirty[r.devId] ? `<div class="row" style="gap:10px;margin-top:12px;flex-wrap:wrap"><button class="pbtn lg" data-act="sched-save">Сохранить</button><button data-act="sched-cancel" style="border:none;background:transparent;color:var(--muted);font-size:13.5px;font-weight:500;padding:12px 8px">Отменить</button><span class="muted" style="font-size:12.5px">есть несохранённые изменения, термостат их ещё не видит</span></div>` : ""}
       </div>
       <div style="padding:12px 20px 18px">
         <button data-act="rare" style="border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:500;padding:10px 0;text-align:left">${S.rare ? "▴" : "▾"} Батарея, замок, преднагрев, пределы</button>
@@ -589,18 +588,20 @@ class DanfossHeatingPanel extends HTMLElement {
           case "sp-inc": return this._setpoint(cur(), el.dataset.k, 0.5);
           case "sp-dec": return this._setpoint(cur(), el.dataset.k, -0.5);
           case "sched-toggle": return this._svc("enable_schedule", { device_id: cur().devId, enabled: !cur().enabled });
-          case "std": { const r0 = cur(); const p = this._progOf(r0); for (let d = 0; d < 7; d++) p[d] = clone([d < 5 ? STD_WD : STD_WE])[0]; S.edit = null; this._queueSave(r0); return rerender(); }
-          case "copy-all": { const r0 = cur(); if (this._dirty[r0.devId]) { this._toast("Сначала дождитесь сохранения"); return; } S.copied = true; rerender(); clearTimeout(this._ct); this._ct = setTimeout(() => { S.copied = false; rerender(); }, 2500); return this._svc("copy_schedule", { device_id: r0.devId }); }
+          case "std": { const r0 = cur(); const p = this._progOf(r0); for (let d = 0; d < 7; d++) p[d] = clone([d < 5 ? STD_WD : STD_WE])[0]; S.edit = null; return rerender(); }
+          case "copy-all": { const r0 = cur(); if (this._dirty[r0.devId]) { this._toast("Сначала сохраните расписание"); return; } S.copied = true; rerender(); clearTimeout(this._ct); this._ct = setTimeout(() => { S.copied = false; rerender(); }, 2500); return this._svc("copy_schedule", { device_id: r0.devId }); }
           case "win": if (this._dragged) return; S.edit = { d: Number(el.dataset.d), i: Number(el.dataset.i) }; return rerender();
           case "win-add": { const r0 = cur(), di = Number(el.dataset.d), p = this._progOf(r0); const day = p[di].sort((a, b) => a[0] - b[0]); let s0 = 480;
             for (const w of day) { if (s0 + 30 <= w[0]) break; s0 = Math.max(s0, w[1]); } if (s0 >= 1440) return; day.push([s0, Math.min(s0 + 120, 1440)]); day.sort((a, b) => a[0] - b[0]);
-            S.edit = { d: di, i: day.findIndex((w) => w[0] === s0) }; this._queueSave(r0); return rerender(); }
+            S.edit = { d: di, i: day.findIndex((w) => w[0] === s0) }; return rerender(); }
           case "ed-start": case "ed-end": { const r0 = cur(), p = this._progOf(r0), w = p[S.edit.d][S.edit.i], v = Number(el.value);
             if (act === "ed-start") w[0] = Math.min(v, w[1] - 30); else w[1] = Math.max(v, w[0] + 30);
             const day = p[S.edit.d]; day.forEach((o, j) => { if (j === S.edit.i) return; if (w[0] < o[1] && o[0] < w[1]) { if (j < S.edit.i) w[0] = Math.max(w[0], o[1]); else w[1] = Math.min(w[1], o[0]); } });
-            this._queueSave(r0); return rerender(); }
-          case "ed-del": { const r0 = cur(), p = this._progOf(r0); p[S.edit.d].splice(S.edit.i, 1); S.edit = null; this._queueSave(r0); return rerender(); }
+            return rerender(); }
+          case "ed-del": { const r0 = cur(), p = this._progOf(r0); p[S.edit.d].splice(S.edit.i, 1); S.edit = null; return rerender(); }
           case "ed-close": S.edit = null; return rerender();
+          case "sched-save": return this._saveProgram(cur());
+          case "sched-cancel": this._discardProgram(cur()); return rerender();
           case "rare": S.rare = !S.rare; return rerender();
           case "ch-open": S.chartOpen = true; S.chCursor = null; rerender(); if (!this._narrow) requestAnimationFrame(() => { const el = this.shadowRoot.getElementById("hp-chart"); if (el) { const top = el.getBoundingClientRect().top + window.scrollY - 12; window.scrollTo({ top, behavior: "smooth" }); } }); return;
           case "ch-close": S.chartOpen = false; S.chCursor = null; return rerender();
@@ -637,7 +638,7 @@ class DanfossHeatingPanel extends HTMLElement {
       const el = this.shadowRoot.querySelector(`.win[data-d="${di}"][data-i="${wi}"]`);
       if (el) { el.style.left = (w[0] / 1440 * 100).toFixed(2) + "%"; el.style.width = ((w[1] - w[0]) / 1440 * 100).toFixed(2) + "%"; el.title = `Дома ${m2t(w[0])} - ${m2t(w[1])}`; }
     };
-    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); setTimeout(() => { this._dragged = false; }, 50); this._queueSave(r); this._render(); };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); setTimeout(() => { this._dragged = false; }, 50); this._render(); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
   }
 
@@ -669,4 +670,4 @@ class DanfossHeatingPanel extends HTMLElement {
   }
 }
 
-customElements.define("danfoss-heating-panel", DanfossHeatingPanel);
+if (!customElements.get("danfoss-heating-panel")) customElements.define("danfoss-heating-panel", DanfossHeatingPanel);

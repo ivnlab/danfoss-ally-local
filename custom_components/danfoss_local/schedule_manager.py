@@ -208,6 +208,9 @@ class ScheduleManager:
             raise vol.Invalid("Saturday windows cannot be cleared while an at-home holiday is planned")
         self.engine.set_schedule(device_id, DeviceSchedule(program, cur.holiday, cur.enabled if enabled is None else enabled))
         await self._async_save()
+        # An explicit save means "this is what I want now": apply the current
+        # scheduled state immediately (overrides included), like holiday set.
+        await self._apply_now(device_id)
 
     async def async_clear(self, device_id: str) -> None:
         self.engine.remove_schedule(device_id)
@@ -253,6 +256,8 @@ class ScheduleManager:
         cur = self._current(device_id)
         self.engine.set_schedule(device_id, DeviceSchedule(cur.program, cur.holiday, enabled))
         await self._async_save()
+        if enabled:
+            await self._apply_now(device_id)
 
     # -- helpers ---------------------------------------------------------
 
