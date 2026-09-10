@@ -18,7 +18,6 @@
             "state": {
               "home": "Home",
               "away": "Away",
-              "pause": "Pause",
               "holiday": "Holiday"
             }
           }
@@ -44,7 +43,6 @@
         "state": {
           "at_home": "Home",
           "leaving_home": "Away",
-          "pause": "Pause",
           "holiday": "Holiday",
           "off": "Off"
         }

@@ -1,17 +1,23 @@
 set_schedule:
   name: Set weekly schedule
-  description: Replace a thermostat's weekly program (7 days, Mon..Sun). Periods are half-open HH:MM ranges pinned to a preset mode; minutes outside every period use default_mode.
+  description: Replace a thermostat's weekly program in the Danfoss Ally shape - 7 days (Mon..Sun) of "at home" windows on a 30-minute grid; everything outside a window is "away".
   fields:
     device_id:
       name: Device
-      description: HA device id of the thermostat (or its raw Tuya device_id).
-      required: true
+      description: HA device id of the thermostat (or its raw Tuya device_id). Ignored when "all" is set.
+      required: false
       selector:
         device:
           integration: danfoss_local
+    all:
+      name: All thermostats
+      description: Apply to every thermostat instead of one device.
+      required: false
+      selector:
+        boolean:
     program:
       name: Program
-      description: '{"default_mode": "leaving_home", "days": [[{"start": "06:00", "end": "08:00", "mode": "at_home"}], [], [], [], [], [], []]}'
+      description: '{"days": [[{"start": "06:00", "end": "08:00"}, {"start": "16:00", "end": "22:30"}], [], [], [], [], [], []]}'
       required: true
       selector:
         object:
@@ -28,10 +34,15 @@ clear_schedule:
   fields:
     device_id:
       name: Device
-      required: true
+      required: false
       selector:
         device:
           integration: danfoss_local
+    all:
+      name: All thermostats
+      required: false
+      selector:
+        boolean:
 
 copy_schedule:
   name: Copy schedule to other thermostats
@@ -53,45 +64,54 @@ copy_schedule:
 
 set_holiday:
   name: Set holiday
-  description: Overlay a date range (inclusive) during which the thermostat is held in the given mode instead of the weekly program.
+  description: Danfoss-style holiday. "away" holds the thermostat in holiday mode between two datetimes; "at_home" replays Saturday's windows on every day of a date range (Saturday must be set).
   fields:
     device_id:
       name: Device
-      required: true
+      required: false
       selector:
         device:
           integration: danfoss_local
-    start:
-      name: Start date
-      required: true
-      selector:
-        date:
-    end:
-      name: End date
-      required: true
-      selector:
-        date:
-    mode:
-      name: Mode
+    all:
+      name: All thermostats
       required: false
-      default: holiday
+      selector:
+        boolean:
+    kind:
+      name: Kind
+      required: true
       selector:
         select:
           options:
-            - holiday
+            - away
             - at_home
-            - leaving_home
-            - pause
+    start:
+      name: Start
+      description: Datetime for "away" (e.g. 2026-12-24 18:00), date for "at_home" (2026-12-24).
+      required: true
+      selector:
+        text:
+    end:
+      name: End
+      description: Datetime for "away", inclusive date for "at_home".
+      required: true
+      selector:
+        text:
 
 clear_holiday:
   name: Clear holiday
   fields:
     device_id:
       name: Device
-      required: true
+      required: false
       selector:
         device:
           integration: danfoss_local
+    all:
+      name: All thermostats
+      required: false
+      selector:
+        boolean:
 
 enable_schedule:
   name: Enable or disable schedule
@@ -99,10 +119,15 @@ enable_schedule:
   fields:
     device_id:
       name: Device
-      required: true
+      required: false
       selector:
         device:
           integration: danfoss_local
+    all:
+      name: All thermostats
+      required: false
+      selector:
+        boolean:
     enabled:
       name: Enabled
       required: true

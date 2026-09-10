@@ -1,11 +1,18 @@
 """Home Assistant glue for local weekly schedules: storage, minute tick,
-service handlers and change notifications for the schedule sensors."""
+service handlers and change notifications for the schedule sensors.
+
+Service payloads use the Danfoss Ally shapes so nothing here can express a
+setting the app or the cloud would not accept:
+  program  = {"days": [[{"start": "06:00", "end": "08:00"}, ...] x7]}  (at-home windows)
+  holiday  = kind "away"  + start/end datetimes, or
+             kind "at_home" + start/end dates (requires Saturday windows)
+"""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import datetime
 
 import voluptuous as vol
 
@@ -18,13 +25,21 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import _MODE_TO_SETPOINT, DanfossLocalCoordinator
-from .schedule import VALID_MODES, Holiday, Period, WeeklyProgram
+from .schedule import (
+    HOLIDAY_AT_HOME,
+    HOLIDAY_AWAY,
+    SATURDAY,
+    Holiday,
+    WeeklyProgram,
+    Window,
+    hhmm_to_min,
+)
 from .schedule_runtime import DeviceSchedule, ScheduleEngine, ScheduleExecutor
 
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_KEY = f"{DOMAIN}.schedules"
-STORAGE_VERSION = 1
+STORAGE_VERSION = 1  # shape changes are tracked by the version_shape key, not the Store version (which would need a migrator)
 
 SERVICE_SET_SCHEDULE = "set_schedule"
 SERVICE_CLEAR_SCHEDULE = "clear_schedule"
@@ -33,32 +48,14 @@ SERVICE_SET_HOLIDAY = "set_holiday"
 SERVICE_CLEAR_HOLIDAY = "clear_holiday"
 SERVICE_ENABLE_SCHEDULE = "enable_schedule"
 
-_PERIOD_SCHEMA = vol.Schema(
-    {
-        vol.Required("start"): cv.string,  # "HH:MM"
-        vol.Required("end"): cv.string,
-        vol.Required("mode"): vol.In(sorted(VALID_MODES)),
-    }
-)
-_PROGRAM_SCHEMA = vol.Schema(
-    {
-        vol.Optional("default_mode", default="leaving_home"): vol.In(sorted(VALID_MODES)),
-        vol.Required("days"): vol.All([[_PERIOD_SCHEMA]], vol.Length(min=7, max=7)),
-    }
-)
-
-
-def _hhmm(text: str) -> int:
-    hh, mm = text.split(":")
-    return int(hh) * 60 + int(mm)
+_WINDOW_SCHEMA = vol.Schema({vol.Required("start"): cv.string, vol.Required("end"): cv.string})
+_PROGRAM_SCHEMA = vol.Schema({vol.Required("days"): vol.All([[_WINDOW_SCHEMA]], vol.Length(min=7, max=7))})
 
 
 def _program_from_service(data: dict) -> WeeklyProgram:
-    days = [
-        [Period(_hhmm(p["start"]), _hhmm(p["end"]), p["mode"]) for p in day]
-        for day in data["days"]
-    ]
-    return WeeklyProgram(days=days, default_mode=data.get("default_mode", "leaving_home"))
+    return WeeklyProgram(
+        days=[[Window(hhmm_to_min(w["start"]), hhmm_to_min(w["end"])) for w in day] for day in data["days"]]
+    )
 
 
 class ScheduleManager:
@@ -77,13 +74,16 @@ class ScheduleManager:
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
+        if data.get("version_shape") != 2 and data:
+            # v1 prototype shape (per-window modes) is not Ally-compatible;
+            # drop it rather than guess a translation.
+            _LOGGER.warning("Discarding pre-Ally-shape schedule storage")
+            data = {}
         for device_id, raw in data.get("devices", {}).items():
             try:
                 self.engine.set_schedule(device_id, DeviceSchedule.from_dict(raw))
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("Dropping unreadable schedule for %s: %s", device_id, err)
-        # Seed baselines now so the first real minute tick can act on a
-        # boundary if one falls right after startup.
         self.engine.tick(dt_util.now())
         self._unsub_tick = async_track_time_change(self.hass, self._on_minute, second=0)
 
@@ -94,7 +94,7 @@ class ScheduleManager:
 
     async def _async_save(self) -> None:
         await self._store.async_save(
-            {"devices": {d: s.to_dict() for d, s in self.engine.all_schedules().items()}}
+            {"version_shape": 2, "devices": {d: s.to_dict() for d, s in self.engine.all_schedules().items()}}
         )
         self._notify()
 
@@ -117,9 +117,7 @@ class ScheduleManager:
         target = device.get(code) if code else None
         if target is not None and "manual_mode_fast" in device:
             await self.coordinator.async_set_temperature(
-                device_id,
-                float(target),
-                code="manual_mode_fast",
+                device_id, float(target), code="manual_mode_fast",
                 optimistic_updates={"manual_mode_fast": float(target)},
             )
 
@@ -138,14 +136,18 @@ class ScheduleManager:
         for update in list(self._listeners):
             update()
 
-    # -- public mutations (used by services) -----------------------------
+    # -- mutations (used by services) ------------------------------------
+
+    def _current(self, device_id: str) -> DeviceSchedule:
+        return self.engine.get_schedule(device_id) or DeviceSchedule()
 
     async def async_set_program(self, device_id: str, program: WeeklyProgram, enabled: bool | None) -> None:
-        current = self.engine.get_schedule(device_id) or DeviceSchedule()
-        self.engine.set_schedule(
-            device_id,
-            DeviceSchedule(program, current.holiday, current.enabled if enabled is None else enabled),
-        )
+        cur = self._current(device_id)
+        if cur.holiday and cur.holiday.kind == HOLIDAY_AT_HOME and not program.days[SATURDAY]:
+            # Same rule as the app: Saturday cannot be cleared while an
+            # at-home holiday is planned.
+            raise vol.Invalid("Saturday windows cannot be cleared while an at-home holiday is planned")
+        self.engine.set_schedule(device_id, DeviceSchedule(program, cur.holiday, cur.enabled if enabled is None else enabled))
         await self._async_save()
 
     async def async_clear(self, device_id: str) -> None:
@@ -159,13 +161,16 @@ class ScheduleManager:
         for tid in targets:
             if tid == source_id:
                 continue
-            cur = self.engine.get_schedule(tid) or DeviceSchedule()
+            cur = self._current(tid)
             self.engine.set_schedule(tid, DeviceSchedule(src.program, cur.holiday, cur.enabled))
         await self._async_save()
 
-    async def async_set_holiday(self, device_id: str, start: date, end: date, mode: str) -> None:
-        cur = self.engine.get_schedule(device_id) or DeviceSchedule()
-        self.engine.set_schedule(device_id, DeviceSchedule(cur.program, Holiday(start, end, mode), cur.enabled))
+    async def async_set_holiday(self, device_id: str, holiday: Holiday) -> None:
+        cur = self._current(device_id)
+        if holiday.kind == HOLIDAY_AT_HOME and not cur.program.days[SATURDAY]:
+            # Same rule as the app: at-home holiday needs a Saturday program.
+            raise vol.Invalid("At-home holiday requires Saturday windows to be set first")
+        self.engine.set_schedule(device_id, DeviceSchedule(cur.program, holiday, cur.enabled))
         await self._async_save()
 
     async def async_clear_holiday(self, device_id: str) -> None:
@@ -176,13 +181,13 @@ class ScheduleManager:
         await self._async_save()
 
     async def async_enable(self, device_id: str, enabled: bool) -> None:
-        cur = self.engine.get_schedule(device_id) or DeviceSchedule()
+        cur = self._current(device_id)
         self.engine.set_schedule(device_id, DeviceSchedule(cur.program, cur.holiday, enabled))
         await self._async_save()
 
-    # -- service registration -------------------------------------------
+    # -- helpers ---------------------------------------------------------
 
-    def _resolve_device(self, ref: str) -> str:
+    def resolve_device(self, ref: str) -> str:
         """Accept either an HA device-registry id or the raw Tuya device_id."""
         entry = dr.async_get(self.hass).async_get(ref)
         if entry is not None:
@@ -208,62 +213,75 @@ def async_register_services(hass: HomeAssistant, get_manager: Callable[[], Sched
             raise vol.Invalid("danfoss_local is not loaded")
         return m
 
+    def targets_of(m: ScheduleManager, call: ServiceCall) -> list[str]:
+        """`device_id` or `all: true` -> list of raw device ids."""
+        if call.data.get("all"):
+            return m.all_device_ids()
+        return [m.resolve_device(call.data["device_id"])]
+
     async def set_schedule(call: ServiceCall) -> None:
         m = mgr()
-        dev = m._resolve_device(call.data["device_id"])
         program = _program_from_service(_PROGRAM_SCHEMA(call.data["program"]))
-        await m.async_set_program(dev, program, call.data.get("enabled"))
+        for dev in targets_of(m, call):
+            await m.async_set_program(dev, program, call.data.get("enabled"))
 
     async def clear_schedule(call: ServiceCall) -> None:
         m = mgr()
-        await m.async_clear(m._resolve_device(call.data["device_id"]))
+        for dev in targets_of(m, call):
+            await m.async_clear(dev)
 
     async def copy_schedule(call: ServiceCall) -> None:
         m = mgr()
-        src = m._resolve_device(call.data["device_id"])
-        targets = [m._resolve_device(t) for t in call.data.get("targets", [])] or m.all_device_ids()
+        src = m.resolve_device(call.data["device_id"])
+        targets = [m.resolve_device(t) for t in call.data.get("targets", [])] or m.all_device_ids()
         await m.async_copy(src, targets)
 
     async def set_holiday(call: ServiceCall) -> None:
         m = mgr()
-        await m.async_set_holiday(
-            m._resolve_device(call.data["device_id"]),
-            call.data["start"],
-            call.data["end"],
-            call.data.get("mode", "holiday"),
-        )
+        kind = call.data["kind"]
+        if kind == HOLIDAY_AWAY:
+            holiday = Holiday(kind, dt_util.as_local(call.data["start"]), dt_util.as_local(call.data["end"]))
+        else:
+            s, e = call.data["start"], call.data["end"]
+            holiday = Holiday(kind, datetime(s.year, s.month, s.day), datetime(e.year, e.month, e.day))
+        for dev in targets_of(m, call):
+            await m.async_set_holiday(dev, holiday)
 
     async def clear_holiday(call: ServiceCall) -> None:
         m = mgr()
-        await m.async_clear_holiday(m._resolve_device(call.data["device_id"]))
+        for dev in targets_of(m, call):
+            await m.async_clear_holiday(dev)
 
     async def enable_schedule(call: ServiceCall) -> None:
         m = mgr()
-        await m.async_enable(m._resolve_device(call.data["device_id"]), call.data["enabled"])
+        for dev in targets_of(m, call):
+            await m.async_enable(dev, call.data["enabled"])
 
-    dev = vol.Required("device_id")
+    target = {vol.Optional("device_id"): cv.string, vol.Optional("all", default=False): cv.boolean}
     hass.services.async_register(
         DOMAIN, SERVICE_SET_SCHEDULE, set_schedule,
-        schema=vol.Schema({dev: cv.string, vol.Required("program"): dict, vol.Optional("enabled"): cv.boolean}),
+        schema=vol.Schema({**target, vol.Required("program"): dict, vol.Optional("enabled"): cv.boolean}),
     )
-    hass.services.async_register(
-        DOMAIN, SERVICE_CLEAR_SCHEDULE, clear_schedule, schema=vol.Schema({dev: cv.string})
-    )
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_SCHEDULE, clear_schedule, schema=vol.Schema(target))
     hass.services.async_register(
         DOMAIN, SERVICE_COPY_SCHEDULE, copy_schedule,
-        schema=vol.Schema({dev: cv.string, vol.Optional("targets"): [cv.string]}),
+        schema=vol.Schema({vol.Required("device_id"): cv.string, vol.Optional("targets"): [cv.string]}),
     )
     hass.services.async_register(
         DOMAIN, SERVICE_SET_HOLIDAY, set_holiday,
         schema=vol.Schema(
-            {dev: cv.string, vol.Required("start"): cv.date, vol.Required("end"): cv.date,
-             vol.Optional("mode", default="holiday"): vol.In(sorted(VALID_MODES))}
+            {
+                **target,
+                vol.Required("kind"): vol.In([HOLIDAY_AWAY, HOLIDAY_AT_HOME]),
+                # away: datetimes; at_home: dates. Both accepted as strings and
+                # parsed by cv; the handler picks the right interpretation.
+                vol.Required("start"): vol.Any(cv.datetime, cv.date),
+                vol.Required("end"): vol.Any(cv.datetime, cv.date),
+            }
         ),
     )
-    hass.services.async_register(
-        DOMAIN, SERVICE_CLEAR_HOLIDAY, clear_holiday, schema=vol.Schema({dev: cv.string})
-    )
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_HOLIDAY, clear_holiday, schema=vol.Schema(target))
     hass.services.async_register(
         DOMAIN, SERVICE_ENABLE_SCHEDULE, enable_schedule,
-        schema=vol.Schema({dev: cv.string, vol.Required("enabled"): cv.boolean}),
+        schema=vol.Schema({**target, vol.Required("enabled"): cv.boolean}),
     )

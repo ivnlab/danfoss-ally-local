@@ -1,135 +1,150 @@
 """Weekly schedule model and evaluator for Danfoss Icon2 (Local).
 
-Pure logic, deliberately free of Home Assistant imports so it can be unit
-tested on its own. A program is 7 days (Mon=0 .. Sun=6); each day is a list
-of periods. A period pins a preset mode to a half-open minute range
-[start, end) of that day. Minutes outside every period fall back to the day's
-default mode.
+Pure logic, free of Home Assistant imports so it is unit-testable on its own.
 
-This generalizes Danfoss's own app model (where a "period" just means
-at_home and everything else is leaving_home): here a period carries an
-explicit mode, so the same structure covers home / away / pause, and holiday
-is layered on top as a date range that overrides the weekly program while it
-is active.
+The model deliberately mirrors the Danfoss Ally app one-to-one, so that a
+program built here can be pushed to Danfoss's cloud (`wkf.week.timer.create`)
+without translation and never expresses anything the app or the thermostat
+would not understand:
+
+- A day is a list of "at home" windows on a 30-minute grid (48 slots), each
+  window at least one slot long, no overlaps. Every minute outside a window
+  is "leaving home". There are no other per-slot modes.
+- Holiday comes in the app's two forms only. "Away" is a datetime range in
+  which the thermostat sits in `holiday`. "At home" is a date range during
+  which every day runs Saturday's windows (the app requires Saturday to be
+  set for this and blocks clearing it while such a holiday is planned).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime
 
-# Preset modes as the coordinator/climate layer already knows them.
 MODE_AT_HOME = "at_home"
 MODE_LEAVING_HOME = "leaving_home"
-MODE_PAUSE = "pause"
 MODE_HOLIDAY = "holiday"
-VALID_MODES = {MODE_AT_HOME, MODE_LEAVING_HOME, MODE_PAUSE, MODE_HOLIDAY}
 
-DAYS = 7  # Mon..Sun
+DAYS = 7           # Mon=0 .. Sun=6, as in datetime.weekday()
+SATURDAY = 5
+SLOT_MINUTES = 30
+DAY_MINUTES = 24 * 60
+
+HOLIDAY_AWAY = "away"
+HOLIDAY_AT_HOME = "at_home"
 
 
 @dataclass(frozen=True)
-class Period:
-    """A [start, end) minute range within a day, pinned to a preset mode."""
+class Window:
+    """An "at home" window [start, end) in minutes since midnight, on the
+    30-minute grid."""
 
-    start: int  # minutes since midnight, 0..1440
-    end: int    # minutes since midnight, > start, <= 1440
-    mode: str
+    start: int
+    end: int
 
     def __post_init__(self) -> None:
-        if not (0 <= self.start < self.end <= 24 * 60):
-            raise ValueError(f"bad period range {self.start}..{self.end}")
-        if self.mode not in VALID_MODES:
-            raise ValueError(f"unknown mode {self.mode!r}")
+        if not (0 <= self.start < self.end <= DAY_MINUTES):
+            raise ValueError(f"bad window {self.start}..{self.end}")
+        if self.start % SLOT_MINUTES or self.end % SLOT_MINUTES:
+            raise ValueError(f"window {self.start}..{self.end} is not on the 30-minute grid")
 
 
 @dataclass
 class WeeklyProgram:
-    """A full weekly program plus the fallback mode for uncovered minutes."""
+    """Seven days of at-home windows."""
 
-    days: list[list[Period]] = field(default_factory=lambda: [[] for _ in range(DAYS)])
-    default_mode: str = MODE_LEAVING_HOME
+    days: list[list[Window]] = field(default_factory=lambda: [[] for _ in range(DAYS)])
 
     def __post_init__(self) -> None:
         if len(self.days) != DAYS:
             raise ValueError("program must have exactly 7 days")
-        for idx, periods in enumerate(self.days):
-            self._check_day(idx, periods)
+        for idx, windows in enumerate(self.days):
+            ordered = sorted(windows, key=lambda w: w.start)
+            for a, b in zip(ordered, ordered[1:]):
+                if a.end > b.start:
+                    raise ValueError(f"overlapping windows on day {idx}: {a} / {b}")
+            self.days[idx] = ordered
 
-    @staticmethod
-    def _check_day(idx: int, periods: list[Period]) -> None:
-        ordered = sorted(periods, key=lambda p: p.start)
-        for a, b in zip(ordered, ordered[1:]):
-            if a.end > b.start:
-                raise ValueError(f"overlapping periods on day {idx}: {a} / {b}")
+    def is_empty(self) -> bool:
+        return all(not d for d in self.days)
+
+    def mode_for_day(self, weekday: int, minute: int) -> str:
+        for w in self.days[weekday]:
+            if w.start <= minute < w.end:
+                return MODE_AT_HOME
+        return MODE_LEAVING_HOME
 
     def mode_at(self, moment: datetime) -> str:
-        """Return the preset mode the program dictates at this local datetime."""
-        minute = moment.hour * 60 + moment.minute
-        for period in self.days[moment.weekday()]:
-            if period.start <= minute < period.end:
-                return period.mode
-        return self.default_mode
+        return self.mode_for_day(moment.weekday(), moment.hour * 60 + moment.minute)
 
-    # -- (de)serialization for HA storage + the wkf cloud mirror -----------
+    # -- (de)serialization -------------------------------------------------
 
     def to_dict(self) -> dict:
-        return {
-            "default_mode": self.default_mode,
-            "days": [
-                [{"start": p.start, "end": p.end, "mode": p.mode} for p in day]
-                for day in self.days
-            ],
-        }
+        return {"days": [[{"start": w.start, "end": w.end} for w in d] for d in self.days]}
 
     @classmethod
     def from_dict(cls, data: dict) -> "WeeklyProgram":
-        days = [
-            [Period(p["start"], p["end"], p["mode"]) for p in day]
-            for day in data.get("days", [[] for _ in range(DAYS)])
-        ]
-        return cls(days=days, default_mode=data.get("default_mode", MODE_LEAVING_HOME))
+        raw = data.get("days") or [[] for _ in range(DAYS)]
+        return cls(days=[[Window(int(w["start"]), int(w["end"])) for w in d] for d in raw])
 
-    # -- Danfoss wkf cloud shape (per day: loops mask + at_home windows) ---
+    # -- Danfoss wkf cloud shape ---------------------------------------------
 
     def to_wkf_days(self) -> list[dict]:
-        """Express each day the way tuya.m.custom.wkf.week.timer.create wants:
-        a 7-bit Mon..Sun loops mask and the list of at_home windows as
-        HH:MM strings. Non-at_home periods are implied by their absence
-        (the device treats gaps as leaving_home)."""
+        """One entry per day exactly as `wkf.week.timer.create` takes it:
+        a 7-bit Mon..Sun `loops` mask and the day's windows as HH:MM."""
         out: list[dict] = []
-        for idx, periods in enumerate(self.days):
-            windows = [
-                {"startTime": _hhmm(p.start), "endTime": _hhmm(p.end)}
-                for p in sorted(periods, key=lambda p: p.start)
-                if p.mode == MODE_AT_HOME
-            ]
+        for idx, windows in enumerate(self.days):
             loops = ["0"] * DAYS
             loops[idx] = "1"
-            out.append({"loops": "".join(loops), "periods": windows})
+            out.append(
+                {
+                    "loops": "".join(loops),
+                    "periods": [{"startTime": _hhmm(w.start), "endTime": _hhmm(w.end)} for w in windows],
+                }
+            )
         return out
 
 
 @dataclass
 class Holiday:
-    """A holiday/vacation overlay active for a whole-day date range."""
+    """The app's holiday: either `away` (datetime range, thermostat held in
+    `holiday`) or `at_home` (whole-day date range following Saturday's
+    windows)."""
 
-    start: date
-    end: date  # inclusive
-    mode: str = MODE_HOLIDAY
+    kind: str
+    start: datetime          # for at_home the time part is ignored (00:00)
+    end: datetime            # away: exclusive instant; at_home: inclusive date
 
-    def active_on(self, day: date) -> bool:
-        return self.start <= day <= self.end
+    def __post_init__(self) -> None:
+        if self.kind not in (HOLIDAY_AWAY, HOLIDAY_AT_HOME):
+            raise ValueError(f"unknown holiday kind {self.kind!r}")
+        if self.kind == HOLIDAY_AWAY and not self.start < self.end:
+            raise ValueError("holiday start must be before end")
+        if self.kind == HOLIDAY_AT_HOME and self.start.date() > self.end.date():
+            raise ValueError("holiday start date must not be after end date")
+
+    def active_at(self, moment: datetime) -> bool:
+        if self.kind == HOLIDAY_AWAY:
+            return self.start <= moment < self.end
+        return self.start.date() <= moment.date() <= self.end.date()
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "start": self.start.isoformat(), "end": self.end.isoformat()}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Holiday":
+        return cls(data["kind"], datetime.fromisoformat(data["start"]), datetime.fromisoformat(data["end"]))
 
 
-def desired_mode_at(
-    program: WeeklyProgram,
-    moment: datetime,
-    holiday: Holiday | None = None,
-) -> str:
-    """Top-level resolver: holiday overlay wins, else the weekly program."""
-    if holiday is not None and holiday.active_on(moment.date()):
-        return holiday.mode
+def desired_mode_at(program: WeeklyProgram, moment: datetime, holiday: Holiday | None = None) -> str:
+    """Resolve the mode the schedule dictates at `moment`.
+
+    Holiday overrides the week. `away` pins `holiday`; `at_home` replays
+    Saturday's windows on every day of the range (Danfoss semantics)."""
+    if holiday is not None and holiday.active_at(moment):
+        if holiday.kind == HOLIDAY_AWAY:
+            return MODE_HOLIDAY
+        return program.mode_for_day(SATURDAY, moment.hour * 60 + moment.minute)
     return program.mode_at(moment)
 
 
