@@ -15,6 +15,8 @@ const MODE_LABEL = { home: "Дома", away: "Вне дома", pause: "Пауз
 const SCHED_TO_PRESET = { at_home: "home", leaving_home: "away", holiday: "holiday", holiday_sat: "holiday" };
 const STD_WD = [[360, 480], [960, 1350]];
 const STD_WE = [[360, 1350]];
+const ROOM_COL = ["#5b7fa6", "#c47a5a", "#5f9a6e", "#8e6fae", "#b8963f", "#4f9a9a"];
+const HIST_STEP = 600000, HIST_N = 7 * 144;   // 10-minute grid, 7 days
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const m2t = (m) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
@@ -39,12 +41,12 @@ const STYLE = `
   .hp input,.hp select{font-family:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px}
   .hp input[type="checkbox"]{width:22px;height:22px;accent-color:var(--acc-ink);padding:0;margin:0}
   .wrap{max-width:1280px;margin:0 auto;padding:16px 16px 32px;display:flex;flex-direction:column;gap:14px}
-  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:2px 4px 0}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 4px 10px;margin:-16px 0 0;position:sticky;top:0;z-index:30;background:var(--bg)}
   .title{font-size:22px;font-weight:500}.sub{color:var(--muted);font-size:13.5px}
   .banner{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px;background:var(--acc-soft);border:1px solid var(--acc);border-radius:14px}
   .banner b{font-size:14.5px;color:var(--acc-ink)}
   .cols{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
-  .side{width:232px;flex:none}.side-list{display:flex;flex-direction:column;gap:4px}
+  .side{width:232px;flex:none;position:sticky;top:78px;max-height:calc(100vh - 94px);overflow:auto}.side-list{display:flex;flex-direction:column;gap:4px}
   .nav{display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:12px;cursor:pointer;font-weight:500;min-height:20px;background:transparent}
   .nav:hover{background:var(--card)}.nav.on{background:var(--card);box-shadow:var(--shadow)}
   .nav .nm{flex:1;min-width:0;white-space:nowrap}.nav .dot{width:9px;height:9px;border-radius:50%;background:var(--warm)}.nav .t{font-size:14px;font-variant-numeric:tabular-nums;color:var(--muted)}
@@ -101,7 +103,14 @@ const STYLE = `
   .editor{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:14px;background:var(--soft);border-radius:12px}
   .toast{position:fixed;right:20px;bottom:20px;background:var(--acc-ink);color:var(--card);padding:10px 16px;border-radius:12px;box-shadow:var(--shadow);opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;font-size:14px}
   .toast.show{opacity:1}
-  @media(max-width:760px){.side{width:100%}.side-list{flex-direction:row;overflow-x:auto;padding-bottom:6px}.side-list>*{flex:none}}
+  .lt{border:1px solid var(--line);background:transparent;color:var(--ink);font-size:12.5px;font-weight:500;padding:7px 12px;border-radius:15px;min-height:34px}
+  .lt.on{background:var(--acc-ink);color:var(--card)}
+  .seg.sm button{padding:8px 14px;font-size:13px;min-height:0;border-radius:17px}
+  .chart svg{width:100%;height:auto;display:block;touch-action:pan-y;cursor:crosshair;font-family:inherit}
+  .backdrop{position:fixed;inset:0;background:rgba(20,22,26,.38);z-index:49}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;max-height:78vh;overflow:auto;border-radius:18px 18px 0 0;padding:4px 16px 20px}
+  .handle{display:flex;justify-content:center;padding:6px 0 12px;touch-action:none;cursor:grab}.handle i{width:44px;height:5px;border-radius:3px;background:var(--line)}
+  @media(max-width:760px){.side{width:100%;position:static;max-height:none}.side-list{flex-direction:row;overflow-x:auto;padding-bottom:6px}.side-list>*{flex:none}}
 `;
 
 class DanfossHeatingPanel extends HTMLElement {
@@ -109,7 +118,12 @@ class DanfossHeatingPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._s = { view: -1, rare: false, edit: null, copied: false, menu: null, vacOpen: false,
-      vf: { kind: "away", when: "now", start: "", end: "", rooms: {}, temp: 17 } };
+      vf: { kind: "away", when: "now", start: "", end: "", rooms: {}, temp: 17 },
+      chartOpen: false, chSel: {}, chLines: { air: true, floor: false, hum: false, target: false }, chRange: 24, chCursor: null };
+    this._hist = {};      // devId -> { at: ms, pts: [{t, air, floor, hum, target, heating}] }
+    this._histLoading = {};
+    this._narrow = false;
+    this._onResize = () => { const n = window.innerWidth < 760; if (n !== this._narrow) { this._narrow = n; this._render(); } };
     this._prog = {};      // roomId -> local program [[[s,e],...] x7] while editing
     this._dirty = {};     // roomId -> true while local edits not yet saved
     this._saveT = {};     // roomId -> debounce timer
@@ -119,8 +133,8 @@ class DanfossHeatingPanel extends HTMLElement {
     this._onDocClick = (e) => { if (this._s.menu !== null && !e.composedPath().some((n) => n.classList && n.classList.contains("mode-wrap"))) { this._s.menu = null; this._render(); } };
   }
 
-  connectedCallback() { document.addEventListener("click", this._onDocClick); this._tick = setInterval(() => this._render(), 60000); }
-  disconnectedCallback() { document.removeEventListener("click", this._onDocClick); clearInterval(this._tick); }
+  connectedCallback() { document.addEventListener("click", this._onDocClick); window.addEventListener("resize", this._onResize); this._onResize(); this._tick = setInterval(() => this._render(), 60000); }
+  disconnectedCallback() { document.removeEventListener("click", this._onDocClick); window.removeEventListener("resize", this._onResize); clearInterval(this._tick); }
 
   set hass(hass) {
     this._hass = hass;
@@ -255,6 +269,121 @@ class DanfossHeatingPanel extends HTMLElement {
 
   _toast(msg) { const t = this.shadowRoot.querySelector(".toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(this._tt); this._tt = setTimeout(() => t.classList.remove("show"), 2500); }
 
+  // -- history ---------------------------------------------------------------
+
+  _histFresh(devId) { const h = this._hist[devId]; return h && Date.now() - h.at < 5 * 60000; }
+
+  async _loadHistory(rooms) {
+    const need = rooms.filter((r) => !this._histFresh(r.devId) && !this._histLoading[r.devId]);
+    if (!need.length || !this._hass.callWS) return;
+    need.forEach((r) => { this._histLoading[r.devId] = true; });
+    const end = new Date(), start = new Date(end.getTime() - HIST_N * HIST_STEP);
+    const ids = (k) => need.map((r) => r.m[k]).filter(Boolean);
+    try {
+      const sens = await this._hass.callWS({ type: "history/history_during_period", start_time: start.toISOString(), end_time: end.toISOString(),
+        entity_ids: [...ids("sensor:air_temperature"), ...ids("sensor:floor_temperature"), ...ids("sensor:humidity"), ...ids("binary_sensor:thermal_actuator")],
+        minimal_response: true, no_attributes: true, significant_changes_only: false });
+      const clim = await this._hass.callWS({ type: "history/history_during_period", start_time: start.toISOString(), end_time: end.toISOString(),
+        entity_ids: need.map((r) => r.climate), minimal_response: false, no_attributes: false, significant_changes_only: false });
+      const grid = []; const t0 = Math.floor(end.getTime() / HIST_STEP) * HIST_STEP - (HIST_N - 1) * HIST_STEP;
+      for (let i = 0; i < HIST_N; i++) grid.push(t0 + i * HIST_STEP);
+      const sample = (rows, pick) => {  // carry-forward resampling onto the 10-minute grid
+        const out = new Array(HIST_N).fill(null); if (!rows || !rows.length) return out;
+        let j = 0, cur = null;
+        for (let i = 0; i < HIST_N; i++) { while (j < rows.length && rows[j].lu * 1000 <= grid[i]) { const v = pick(rows[j]); if (v != null) cur = v; j++; } out[i] = cur; }
+        const first = out.find((v) => v != null); for (let i = 0; i < HIST_N && out[i] == null; i++) out[i] = first ?? null;
+        return out;
+      };
+      const numS = (row) => { const n = parseFloat(row.s); return Number.isFinite(n) ? n : null; };
+      for (const r of need) {
+        const air = sample(sens[r.m["sensor:air_temperature"]], numS), floor = sample(sens[r.m["sensor:floor_temperature"]], numS), hum = sample(sens[r.m["sensor:humidity"]], numS);
+        const heat = sample(sens[r.m["binary_sensor:thermal_actuator"]], (row) => (row.s === "on" ? 1 : row.s === "off" ? 0 : null));
+        const target = sample(clim[r.climate], (row) => { const n = parseFloat(row.a && row.a.temperature); return Number.isFinite(n) ? n : null; });
+        const pts = grid.map((tt, i) => ({ t: tt, air: air[i], floor: floor[i], hum: hum[i], target: target[i], heating: heat[i] === 1 }));
+        const last = pts[HIST_N - 1], m = this._model(r);   // end the series at the live values
+        if (m.air != null) last.air = m.air; if (m.floor != null) last.floor = m.floor; if (m.hum != null) last.hum = m.hum; if (m.target != null) last.target = m.target; last.heating = m.heating;
+        this._hist[r.devId] = { at: Date.now(), pts };
+      }
+    } catch (e) { this._toast("История недоступна: " + (e && e.message ? e.message : e)); }
+    finally { need.forEach((r) => { this._histLoading[r.devId] = false; }); this._render(); }
+  }
+
+  // Port of the designer's buildChart(): returns {svg, cursorLabel, legend, series, pi}
+  _buildChart(rooms, lines, rangeH, cursor) {
+    const W = 800, H = 262, L = 44, R = 756, T = 12, B = 222;
+    const series = rooms.filter((r) => this._hist[r.devId]).map((r) => ({ r, pts: this._hist[r.devId].pts.slice(-(rangeH * 6)), name: r.name, color: ROOM_COL[Math.max(0, this._rooms.findIndex((x) => x.devId === r.devId)) % ROOM_COL.length] }));
+    if (!series.length) return { svg: "", cursorLabel: "", legend: [], series: [], pi: 0 };
+    const N = series[0].pts.length, single = series.length === 1;
+    const x = (k) => L + k / (N - 1) * (R - L);
+    let lo = 99, hi = -99, hlo = 100, hhi = 0;
+    const acc = (v, isH) => { if (v == null) return; if (isH) { hlo = Math.min(hlo, v); hhi = Math.max(hhi, v); } else { lo = Math.min(lo, v); hi = Math.max(hi, v); } };
+    series.forEach((sr) => sr.pts.forEach((p) => { if (lines.air) acc(p.air); if (lines.floor) acc(p.floor); if (lines.target) acc(p.target); acc(p.hum, true); }));
+    if (lo > hi) { lo = 15; hi = 25; } if (hlo > hhi) { hlo = 40; hhi = 60; }
+    lo = Math.floor(lo) - 1; hi = Math.ceil(hi) + 1; hlo = Math.floor(hlo / 5) * 5 - 5; hhi = Math.ceil(hhi / 5) * 5 + 5;
+    const y = (v) => B - (v - lo) / (hi - lo) * (B - T), yh = (v) => B - (v - hlo) / (hhi - hlo) * (B - T);
+    const path = (pts, key, fy) => { let d = "", pen = false; pts.forEach((p, k) => { const v = p[key]; if (v == null) { pen = false; return; } d += (pen ? "L" : "M") + x(k).toFixed(1) + " " + fy(v).toFixed(1); pen = true; }); return d; };
+    const stepPath = (pts) => { let d = "", pen = false; pts.forEach((p, k) => { const v = p.target; if (v == null) { pen = false; return; } d += pen ? "H" + x(k).toFixed(1) + "V" + y(v).toFixed(1) : "M" + x(k).toFixed(1) + " " + y(v).toFixed(1); pen = true; }); return d; };
+    const k = [];
+    if (single) { const pts = series[0].pts; let st = null; pts.forEach((p, i) => { if (p.heating && st === null) st = i; if ((!p.heating || i === N - 1) && st !== null) { k.push(`<rect x="${x(st).toFixed(1)}" y="${T}" width="${Math.max(1, x(i) - x(st)).toFixed(1)}" height="${B - T}" style="fill:var(--warm);opacity:.2"/>`); st = null; } }); }
+    const tstep = (hi - lo) > 12 ? 4 : (hi - lo) > 6 ? 2 : 1;
+    for (let v = lo; v <= hi; v += tstep) k.push(`<line x1="${L}" x2="${R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" style="stroke:var(--soft)"/><text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" style="fill:var(--muted);font-size:12px">${v}°</text>`);
+    if (lines.hum) [hlo, (hlo + hhi) / 2, hhi].forEach((v) => k.push(`<text x="${R + 8}" y="${(yh(v) + 4).toFixed(1)}" style="fill:var(--muted);font-size:12px">${Math.round(v)}%</text>`));
+    series[0].pts.forEach((p, i) => { const d = new Date(p.t), m0 = d.getMinutes() < 10, hr = d.getHours();
+      const lab = rangeH <= 24 ? (m0 && hr % 4 === 0 ? pad2(hr) + ":00" : null) : (m0 && hr === 0 ? DAY[(d.getDay() + 6) % 7] : null);
+      if (lab) k.push(`<line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${B}" y2="${B + 5}" style="stroke:var(--line)"/><text x="${x(i).toFixed(1)}" y="${B + 20}" text-anchor="middle" style="fill:var(--muted);font-size:12px">${lab}</text>`); });
+    series.forEach((sr) => {
+      if (lines.hum) k.push(`<path d="${path(sr.pts, "hum", yh)}" fill="none" stroke-dasharray="2 4" style="stroke:${sr.color};stroke-width:1.3;opacity:.55"/>`);
+      if (lines.target) k.push(`<path d="${stepPath(sr.pts)}" fill="none" stroke-dasharray="6 4" style="stroke:${single ? "var(--warm-ink)" : sr.color};stroke-width:1.6;opacity:.85"/>`);
+      if (lines.floor) k.push(`<path d="${path(sr.pts, "floor", y)}" fill="none" style="stroke:${single ? "var(--acc)" : sr.color};stroke-width:1.8;opacity:${single ? 1 : .6}"/>`);
+      if (lines.air) k.push(`<path d="${path(sr.pts, "air", y)}" fill="none" style="stroke:${single ? "var(--ink)" : sr.color};stroke-width:2.3"/>`);
+    });
+    k.push(`<line x1="${R}" x2="${R}" y1="${T - 6}" y2="${B}" style="stroke:var(--warm);stroke-width:2"/>`);
+    const ci = cursor == null ? null : Math.max(0, Math.min(N - 1, cursor));
+    if (ci != null) { k.push(`<line x1="${x(ci).toFixed(1)}" x2="${x(ci).toFixed(1)}" y1="${T - 6}" y2="${B}" stroke-dasharray="3 3" style="stroke:var(--ink);stroke-width:1.2"/>`);
+      series.forEach((sr) => { const v = sr.pts[ci].air; if (lines.air && v != null) k.push(`<circle cx="${x(ci).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4.5" style="fill:${single ? "var(--ink)" : sr.color};stroke:var(--card);stroke-width:2"/>`); }); }
+    const svg = `<svg data-chart="1" data-n="${N}" data-l="${L}" data-r="${R}" data-w="${W}" viewBox="0 0 ${W} ${H}">${k.join("")}</svg>`;
+    const pi = ci ?? (N - 1), pd = new Date(series[0].pts[pi].t);
+    const cursorLabel = ci == null ? (rangeH <= 24 ? "последние 24 часа · значения сейчас" : "последние 7 дней · значения сейчас") : `${DAY[(pd.getDay() + 6) % 7]} ${pad2(pd.getHours())}:${pad2(pd.getMinutes())}`;
+    const p0 = series[0].pts[pi];
+    const legend = single ? [
+      { label: "Воздух", color: "var(--ink)", value: f1(p0.air) + "°" }, { label: "Пол", color: "var(--acc)", value: f1(p0.floor) + "°" },
+      { label: "Цель", color: "var(--warm-ink)", value: f1(p0.target) + "°" }, { label: "Влажность", color: "var(--muted)", value: (p0.hum == null ? "–" : Math.round(p0.hum)) + "%" },
+      { label: "Термоголовка", color: "var(--warm)", value: p0.heating ? "открыта" : "закрыта" }] : [];
+    return { svg, cursorLabel, legend, series, pi };
+  }
+
+  _chartBlock(rooms, isRoomV) {
+    const S = this._s;
+    const sel = isRoomV ? rooms : rooms.filter((r) => S.chSel[r.devId] !== false);
+    const lines = isRoomV ? { air: true, floor: true, hum: true, target: true } : S.chLines;
+    const wanted = isRoomV || S.chartOpen;
+    const loading = wanted && sel.some((r) => !this._hist[r.devId]);
+    if (wanted) this._loadHistory(sel);
+    const cb = loading ? { svg: "", cursorLabel: "", legend: [], series: [], pi: 0 } : this._buildChart(sel, lines, S.chRange, S.chCursor);
+    const seg = `<div class="seg sm"><button data-act="ch-range" data-v="24" class="${S.chRange === 24 ? "on" : ""}">24 часа</button><button data-act="ch-range" data-v="168" class="${S.chRange === 168 ? "on" : ""}">7 дней</button></div>`;
+    const svg = loading ? `<div class="muted" style="padding:40px 0;text-align:center;font-size:13px">Загрузка истории…</div>` : (cb.svg || `<div class="muted" style="padding:40px 0;text-align:center;font-size:13px">Выберите хотя бы одну комнату</div>`);
+    if (isRoomV) {
+      return `<div class="sec"><div class="row" style="gap:12px;flex-wrap:wrap"><div class="muted" style="font-size:13px;font-weight:500">График</div><div class="muted" style="font-size:12.5px">${cb.cursorLabel}</div><div style="flex:1"></div>${seg}</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">${cb.legend.map((l) => `<div style="display:flex;align-items:center;gap:7px;font-size:13px"><div style="width:16px;height:3px;border-radius:2px;background:${l.color}"></div><span class="muted">${l.label}</span><span style="font-weight:700;font-variant-numeric:tabular-nums">${l.value}</span></div>`).join("")}</div>
+        <div class="chart" style="margin-top:8px">${svg}</div>
+        <div class="muted" style="font-size:12px;margin-top:6px">Коснитесь графика или проведите по нему, чтобы увидеть значения в точке времени. Оранжевая подложка - термоголовка открыта.</div></div>`;
+    }
+    if (!S.chartOpen) return `<section class="card" style="padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div style="font-size:16px;font-weight:500">График</div><div class="muted" style="font-size:13px">температура, влажность и нагрев по комнатам за 24 часа или 7 дней</div><div style="flex:1"></div><button class="obtn" data-act="ch-open">Показать график</button></section>`;
+    const title = sel.length === 1 ? "График · " + esc(sel[0].name) : sel.length === 0 ? "График · выберите комнаты" : "График · " + sel.length + " комнат";
+    const toggles = [["air", "Воздух"], ["floor", "Пол"], ["hum", "Влажность"], ["target", "Цель"]].map(([kk, l]) => `<button class="lt ${lines[kk] ? "on" : ""}" data-act="ch-line" data-v="${kk}">${l}</button>`).join("");
+    const filt = rooms.map((r, i) => { const sr = cb.series.find((s) => s.r.devId === r.devId); const p = sr ? sr.pts[cb.pi] : null; const col = ROOM_COL[i % ROOM_COL.length];
+      return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;min-height:38px"><input type="checkbox" data-act="ch-room" data-d="${r.devId}" ${S.chSel[r.devId] !== false ? "checked" : ""} style="accent-color:${col}"><span style="width:14px;height:3px;border-radius:2px;background:${col}"></span>${esc(r.name)}<span style="font-weight:700;font-variant-numeric:tabular-nums;color:${p ? col : "var(--muted)"}">${p && p.air != null ? f1(p.air) + "°" : ""}</span></label>`; }).join("");
+    const sheet = this._narrow;
+    const inner = `${sheet ? `<div class="handle" data-handle="1"><i></i></div>` : ""}
+      <div class="row" style="gap:12px;flex-wrap:wrap"><div style="font-size:16px;font-weight:500">${title}</div><div style="flex:1"></div><div class="row" style="flex:none">${seg}<button class="obtn" data-act="ch-close" style="padding:9px 14px;font-size:13px">Свернуть</button></div></div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">${cb.cursorLabel}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${toggles}</div>
+      <div class="chart" style="margin-top:8px">${svg}</div>
+      <div style="display:flex;gap:4px 18px;flex-wrap:wrap;margin-top:8px">${filt}</div>
+      <div class="muted" style="font-size:12px;margin-top:4px">${sel.length === 1 ? "Оранжевая подложка - термоголовка открыта. Коснитесь графика, чтобы увидеть значения в точке времени." : "Подложка нагрева показывается, когда выбрана одна комната. Коснитесь графика, чтобы увидеть значения в точке времени."}</div>`;
+    return sheet ? `<div class="backdrop" data-act="ch-close"></div><section id="hp-chart" class="card sheet">${inner}</section>` : `<section id="hp-chart" class="card" style="padding:16px 18px">${inner}</section>`;
+  }
+
   // -- render --------------------------------------------------------------
 
   _render() {
@@ -342,6 +471,7 @@ class DanfossHeatingPanel extends HTMLElement {
         <div class="muted" style="font-size:12.5px">${startDisabled ? "Укажите даты и хотя бы одно помещение" : ""}</div></div>` : "";
 
     return `<section class="grid">${cards}</section>
+      ${this._chartBlock(rooms, false)}
       <section class="card" style="padding:16px 18px"><div class="row" style="gap:14px;flex-wrap:wrap"><div style="font-size:16px;font-weight:500">Отпуск</div><div class="muted" style="font-size:13px">действует на весь дом, поверх расписаний</div><div style="flex:1"></div>
         ${S.vacOpen ? "" : `<button class="obtn" data-act="vac-open">${withHol.length ? "Исправить параметры" : "Запланировать отпуск"}</button>`}</div>${form}</section>`;
   }
@@ -388,6 +518,7 @@ class DanfossHeatingPanel extends HTMLElement {
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${quick}${e.ovr && !vacd ? `<button class="link" data-act="resume">Вернуться к расписанию</button>` : ""}</div>
         ${vacd ? `<div class="muted" style="margin-top:8px;font-size:12.5px">Быстрые режимы недоступны, пока действует отпуск</div>` : ""}
       </div>
+      ${this._chartBlock([r], true)}
       <div class="sec"><div class="muted" style="font-size:13px;font-weight:500;margin-bottom:10px">Уставки режимов</div><div style="display:flex;gap:10px;flex-wrap:wrap">${sps}</div></div>
       <div class="sec">
         <div class="row" style="gap:12px;flex-wrap:wrap;margin-bottom:6px"><div class="muted" style="font-size:13px;font-weight:500">Недельное расписание</div>
@@ -461,12 +592,25 @@ class DanfossHeatingPanel extends HTMLElement {
           case "ed-del": { const r0 = cur(), p = this._progOf(r0); p[S.edit.d].splice(S.edit.i, 1); S.edit = null; this._queueSave(r0); return rerender(); }
           case "ed-close": S.edit = null; return rerender();
           case "rare": S.rare = !S.rare; return rerender();
+          case "ch-open": S.chartOpen = true; S.chCursor = null; rerender(); if (!this._narrow) requestAnimationFrame(() => { const el = this.shadowRoot.getElementById("hp-chart"); if (el) { const top = el.getBoundingClientRect().top + window.scrollY - 12; window.scrollTo({ top, behavior: "smooth" }); } }); return;
+          case "ch-close": S.chartOpen = false; S.chCursor = null; return rerender();
+          case "ch-range": S.chRange = Number(el.dataset.v); S.chCursor = null; return rerender();
+          case "ch-line": S.chLines[el.dataset.v] = !S.chLines[el.dataset.v]; return rerender();
+          case "ch-room": S.chSel[el.dataset.d] = el.checked; S.chCursor = null; return rerender();
           case "lock-cb": return this._call("lock", el.checked ? "lock" : "unlock", { entity_id: cur().m["lock:child_lock"] });
           case "preheat-cb": return this._call("switch", el.checked ? "turn_on" : "turn_off", { entity_id: cur().m["switch:pre_heat"] });
         }
       });
     });
     root.querySelectorAll("[data-drag]").forEach((h) => h.addEventListener("pointerdown", (ev) => this._drag(ev, h, cur())));
+    root.querySelectorAll("svg[data-chart]").forEach((svg) => {
+      const onPtr = (ev) => { if (ev.type === "pointermove" && ev.buttons === 0) return; const rect = svg.getBoundingClientRect(); const W = Number(svg.dataset.w), L = Number(svg.dataset.l), R = Number(svg.dataset.r), N = Number(svg.dataset.n);
+        const xf = (ev.clientX - rect.left) / rect.width * W; S.chCursor = Math.max(0, Math.min(N - 1, Math.round((xf - L) / (R - L) * (N - 1)))); rerender(); };
+      svg.addEventListener("pointerdown", onPtr); svg.addEventListener("pointermove", onPtr);
+    });
+    const handle = root.querySelector("[data-handle]");
+    if (handle) handle.addEventListener("pointerdown", (ev) => { ev.preventDefault(); const y0 = ev.clientY; const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+      const mv = (e) => { if (e.clientY - y0 > 70) { up(); S.chartOpen = false; rerender(); } }; window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up); });
   }
 
   _drag(ev, h, r) {

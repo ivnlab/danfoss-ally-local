@@ -20,10 +20,10 @@
   .hp ::selection{background:var(--acc-soft)}
   .hp input,.hp select{font-family:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px}
   .hp input[type="checkbox"]{width:22px;height:22px;accent-color:var(--acc-ink);padding:0;margin:0}
-  .hp-side{width:232px;flex:none}
+  .hp-side{width:232px;flex:none;position:sticky;top:78px;max-height:calc(100vh - 94px);overflow:auto}
   .hp-side-list{display:flex;flex-direction:column;gap:4px}
   @media(max-width:760px){
-    .hp-side{width:100%}
+    .hp-side{width:100%;position:static;max-height:none}
     .hp-side-list{flex-direction:row;overflow-x:auto;padding-bottom:6px}
     .hp-side-list>*{flex:none}
   }
@@ -32,7 +32,7 @@
 <div class="hp" data-theme="{{ theme }}" style="min-height:100vh;background:var(--bg);color:var(--ink);font-family:'Roboto',system-ui,sans-serif;font-size:15px;line-height:1.45">
   <div style="max-width:1280px;margin:0 auto;padding:16px 16px 32px;display:flex;flex-direction:column;gap:14px">
 
-    <header style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:2px 4px 0">
+    <header style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 4px 10px;margin:-16px 0 0;position:sticky;top:0;z-index:30;background:var(--bg)">
       <div style="font-size:22px;font-weight:500">Тёплый пол</div>
       <div style="color:var(--muted);font-size:13.5px">Danfoss Icon2 · {{ nowLabel }}</div>
       <div style="flex:1"></div>
@@ -71,7 +71,7 @@
         <sc-if value="{{ isSummary }}" hint-placeholder-val="{{ true }}">
           <section style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">
             <sc-for list="{{ rooms }}" as="r" hint-placeholder-count="6">
-              <div onClick="{{ r.onSelect }}" role="button" tabindex="0" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);cursor:pointer;border:2px solid transparent" style-hover="border-color:var(--acc)">
+              <div onClick="{{ r.onSelect }}" role="button" tabindex="0" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);cursor:pointer;border:2px solid {{ r.edgeColor }}" style-hover="border-color:var(--acc)">
                 <div style="display:flex;align-items:center;gap:8px">
                   <div style="font-weight:500;font-size:15px;min-width:0">{{ r.name }}</div>
                   <button onClick="{{ r.onLockToggle }}" title="{{ r.lockTitle }}" aria-label="{{ r.lockTitle }}" style="border:none;background:transparent;cursor:pointer;padding:6px;margin:-6px 0;color:{{ r.lockColor }};display:flex;align-items:center" style-hover="opacity:.7">
@@ -114,6 +114,49 @@
               </div>
             </sc-for>
           </section>
+
+          <sc-if value="{{ chartClosed }}" hint-placeholder-val="{{ true }}">
+            <section style="background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <div style="font-size:16px;font-weight:500">График</div>
+              <div style="color:var(--muted);font-size:13px">температура, влажность и нагрев по комнатам за 24 часа или 7 дней</div>
+              <div style="flex:1"></div>
+              <button onClick="{{ ch.open }}" style="border:1px solid var(--line);background:transparent;color:var(--ink);padding:10px 16px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="background:var(--soft)">Показать график</button>
+            </section>
+          </sc-if>
+          <sc-if value="{{ chartOpen }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ ch.sheet }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ ch.close }}" style="position:fixed;inset:0;background:rgba(20,22,26,.38);z-index:49"></div>
+            </sc-if>
+            <section id="hp-chart" style="position:{{ ch.pos }};left:0;right:0;bottom:0;z-index:50;max-height:{{ ch.maxH }};overflow:auto;background:var(--card);border-radius:{{ ch.radius }};box-shadow:var(--shadow);padding:{{ ch.pad }}">
+              <sc-if value="{{ ch.sheet }}" hint-placeholder-val="{{ false }}">
+                <div onPointerDown="{{ ch.onHandleDown }}" style="display:flex;justify-content:center;padding:6px 0 12px;touch-action:none;cursor:grab"><div style="width:44px;height:5px;border-radius:3px;background:var(--line)"></div></div>
+              </sc-if>
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <div style="font-size:16px;font-weight:500">{{ ch.title }}</div>
+                <div style="flex:1"></div>
+                <div style="display:flex;align-items:center;gap:8px;flex:none">
+                  <div style="display:flex;background:var(--soft);border-radius:20px;padding:3px">
+                    <button onClick="{{ ch.set24 }}" style="border:none;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;background:{{ ch.bg24 }};color:var(--ink);border-radius:17px">24 часа</button>
+                    <button onClick="{{ ch.set7 }}" style="border:none;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;background:{{ ch.bg7 }};color:var(--ink);border-radius:17px">7 дней</button>
+                  </div>
+                  <button onClick="{{ ch.close }}" style="border:1px solid var(--line);background:transparent;color:var(--ink);padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="background:var(--soft)">Свернуть</button>
+                </div>
+              </div>
+              <div style="font-size:12.5px;color:var(--muted);margin-top:4px">{{ ch.cursorLabel }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+                <sc-for list="{{ ch.lineToggles }}" as="lt" hint-placeholder-count="4">
+                  <button onClick="{{ lt.onToggle }}" style="border:1px solid var(--line);background:{{ lt.bg }};color:{{ lt.fg }};font-size:12.5px;font-weight:500;padding:7px 12px;border-radius:15px;cursor:pointer;min-height:34px">{{ lt.label }}</button>
+                </sc-for>
+              </div>
+              <div style="margin-top:8px">{{ chartSvg }}</div>
+              <div style="display:flex;gap:4px 18px;flex-wrap:wrap;margin-top:8px">
+                <sc-for list="{{ ch.roomsFilter }}" as="rf" hint-placeholder-count="6">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;min-height:38px"><input type="checkbox" checked="{{ rf.checked }}" onChange="{{ rf.onToggle }}" style="accent-color:{{ rf.color }}"><span style="width:14px;height:3px;border-radius:2px;background:{{ rf.color }}"></span>{{ rf.label }}<span style="font-weight:700;font-variant-numeric:tabular-nums;color:{{ rf.valueColor }}">{{ rf.value }}</span></label>
+                </sc-for>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px">{{ ch.hint }}</div>
+            </section>
+          </sc-if>
 
           <section style="background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px">
             <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -216,6 +259,25 @@
             </div>
 
             <div style="padding:16px 20px;border-bottom:1px solid var(--soft)">
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <div style="font-size:13px;font-weight:500;color:var(--muted)">График</div>
+                <div style="font-size:12.5px;color:var(--muted)">{{ ch.cursorLabel }}</div>
+                <div style="flex:1"></div>
+                <div style="display:flex;background:var(--soft);border-radius:20px;padding:3px">
+                  <button onClick="{{ ch.set24 }}" style="border:none;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;background:{{ ch.bg24 }};color:var(--ink);border-radius:17px">24 часа</button>
+                  <button onClick="{{ ch.set7 }}" style="border:none;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;background:{{ ch.bg7 }};color:var(--ink);border-radius:17px">7 дней</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
+                <sc-for list="{{ ch.legend }}" as="l" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:center;gap:7px;font-size:13px"><div style="width:16px;height:3px;border-radius:2px;background:{{ l.color }}"></div><span style="color:var(--muted)">{{ l.label }}</span><span style="font-weight:700;font-variant-numeric:tabular-nums">{{ l.value }}</span></div>
+                </sc-for>
+              </div>
+              <div style="margin-top:8px">{{ chartSvg }}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:6px">Коснитесь графика или проведите по нему, чтобы увидеть значения в точке времени. Оранжевая подложка — термоголовка открыта.</div>
+            </div>
+
+            <div style="padding:16px 20px;border-bottom:1px solid var(--soft)">
               <div style="font-size:13px;font-weight:500;color:var(--muted);margin-bottom:10px">Уставки режимов</div>
               <div style="display:flex;gap:10px;flex-wrap:wrap">
                 <sc-for list="{{ setpoints }}" as="s" hint-placeholder-count="4">
@@ -308,6 +370,7 @@ class Component extends DCLogic {
       heating:false, override:null, preset:'home', lock:false, preheat:false, fault:false}, o||{});
     this.state = {
       theme: null, view: -1, rare: false, edit: null, copied: false, menu: null,
+      chartOpen: false, chSel: [true,true,true,true,true,true], chLines: {air:true, floor:false, hum:false, target:false}, chRange: 24, chCursor: null, narrow: false,
       vac: null, vacOpen: false,
       vf: {kind:'away', when:'now', start:'', end:'', rooms:[true,true,true,true,true,true], temp:17},
       rooms: [
@@ -319,6 +382,89 @@ class Component extends DCLogic {
         mk(5,'Душевая',22.7,23.2,61,15,{fault:true})
       ]
     };
+  }
+  componentDidMount() {
+    this.hist = this.state.rooms.map((r,i)=>this.genHistory(r, 17+i*97));
+    this._onResize = () => { const n = window.innerWidth < 760; if (n !== this.state.narrow) this.setState({narrow:n}); };
+    this._onResize(); window.addEventListener('resize', this._onResize);
+    this.forceUpdate();
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._onResize); }
+  componentDidUpdate() {
+    const open = this.state.chartOpen;
+    if (open && !this._wasOpen && !this.state.narrow) {
+      requestAnimationFrame(() => { const el = document.getElementById('hp-chart'); if (el) { const top = el.getBoundingClientRect().top + window.scrollY - 12; window.scrollTo({top, behavior:'smooth'}); } });
+    }
+    this._wasOpen = open;
+  }
+  genHistory(r, seed) {
+    let s = seed; const rnd = () => { s = (s*1664525+1013904223) % 4294967296; return s/4294967296; };
+    const N = 7*144, step = 600000, start = Date.now() - (N-1)*step;
+    let air = r.sp.away+0.5, floor = air-0.3, heating = false, manual = null, prevBase = null;
+    const pts = [];
+    for (let i=0;i<N;i++) {
+      const t = start + i*step, d = new Date(t), di=(d.getDay()+6)%7, min=d.getHours()*60+d.getMinutes();
+      const base = r.enabled ? (this.inWin(r.program[di], min) ? r.sp.home : r.sp.away) : r.sp[r.preset];
+      if (prevBase !== null && prevBase !== base) manual = null; prevBase = base;
+      if (rnd() < 0.003) manual = base + (rnd()<0.5?-1:1)*(0.5+Math.round(rnd()*2)*0.5);
+      const target = manual ?? base;
+      if (!heating && air < target-0.3) heating = true; if (heating && air > target+0.1) heating = false;
+      air += (heating ? 0.055 : (17-air)*0.012) + (rnd()-0.5)*0.05;
+      floor += ((heating ? air+1.6 : air-0.5) - floor)*0.12;
+      const hum = 46 + 6*Math.sin(t/86400000*2*Math.PI) + (rnd()-0.5)*1.6 + (heating?-1.2:0);
+      pts.push({t, air, floor, hum, target, heating});
+    }
+    // blend the tail into the room's live state so the chart ends at today's real values
+    const last = pts[N-1], K = 18;
+    const curTarget = r.override ? (r.override.temp!=null ? r.override.temp : r.sp[r.override.mode]) : last.target;
+    const dA = r.air-last.air, dF = r.floor-last.floor, dH = r.hum-last.hum;
+    for (let k=0;k<K;k++){ const p=pts[N-K+k], f=(k+1)/K; p.air+=dA*f; p.floor+=dF*f; p.hum+=dH*f; if(r.override) p.target=curTarget; p.heating = k>K/2 ? r.heating : p.heating; }
+    Object.assign(last, {air:r.air, floor:r.floor, hum:r.hum, target:curTarget, heating:r.heating});
+    return pts;
+  }
+  buildChart(roomIdxs, lines, rangeH, cursor) {
+    const COL = ['#5b7fa6','#c47a5a','#5f9a6e','#8e6fae','#b8963f','#4f9a9a'];
+    const DAYS = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    const W=800,H=262,L=44,R=756,T=12,B=222, h=React.createElement;
+    if (!this.hist || !roomIdxs.length) return {svg:null, cursorLabel:'', legend:[], series:[], COL};
+    const n = rangeH*6;
+    const series = roomIdxs.map(i=>({i, pts:this.hist[i].slice(-n), name:this.state.rooms[i].name, color:COL[i]}));
+    const N = series[0].pts.length, single = series.length===1;
+    const x = k => L + k/(N-1)*(R-L);
+    let lo=99, hi=-99, hlo=100, hhi=0;
+    series.forEach(sr=>sr.pts.forEach(p=>{ if(lines.air){lo=Math.min(lo,p.air);hi=Math.max(hi,p.air);} if(lines.floor){lo=Math.min(lo,p.floor);hi=Math.max(hi,p.floor);} if(lines.target){lo=Math.min(lo,p.target);hi=Math.max(hi,p.target);} hlo=Math.min(hlo,p.hum); hhi=Math.max(hhi,p.hum); }));
+    if (lo>hi) { lo=15; hi=25; }
+    lo=Math.floor(lo)-1; hi=Math.ceil(hi)+1; hlo=Math.floor(hlo/5)*5-5; hhi=Math.ceil(hhi/5)*5+5;
+    const y = v => B-(v-lo)/(hi-lo)*(B-T), yh = v => B-(v-hlo)/(hhi-hlo)*(B-T);
+    const path = (pts, key, fy) => pts.map((p,k)=>(k?'L':'M')+x(k).toFixed(1)+' '+fy(p[key]).toFixed(1)).join(' ');
+    const stepPath = (pts) => pts.map((p,k)=>k?('H'+x(k).toFixed(1)+'V'+y(p.target).toFixed(1)):('M'+x(0).toFixed(1)+' '+y(p.target).toFixed(1))).join('');
+    const kids = [];
+    if (single) { const pts=series[0].pts; let st=null; pts.forEach((p,k)=>{ if(p.heating&&st===null) st=k; if((!p.heating||k===N-1)&&st!==null){ kids.push(h('rect',{key:'b'+st,x:x(st),y:T,width:Math.max(1,x(k)-x(st)),height:B-T,style:{fill:'var(--warm)',opacity:.2}})); st=null; } }); }
+    const tstep = (hi-lo)>12?4:((hi-lo)>6?2:1);
+    for (let v=lo; v<=hi; v+=tstep) { kids.push(h('line',{key:'g'+v,x1:L,x2:R,y1:y(v),y2:y(v),style:{stroke:'var(--soft)'}})); kids.push(h('text',{key:'gt'+v,x:L-8,y:y(v)+4,textAnchor:'end',style:{fill:'var(--muted)',fontSize:12}},v+'°')); }
+    if (lines.hum) [hlo,(hlo+hhi)/2,hhi].forEach(v=>kids.push(h('text',{key:'h'+v,x:R+8,y:yh(v)+4,style:{fill:'var(--muted)',fontSize:12}},Math.round(v)+'%')));
+    series[0].pts.forEach((p,k)=>{ const d=new Date(p.t); const m=d.getMinutes()<10, hr=d.getHours(); const lab = rangeH<=24 ? (m&&hr%4===0 ? ('0'+hr).slice(-2)+':00' : null) : (m&&hr===0 ? DAYS[(d.getDay()+6)%7] : null); if(lab){ kids.push(h('line',{key:'xt'+k,x1:x(k),x2:x(k),y1:B,y2:B+5,style:{stroke:'var(--line)'}})); kids.push(h('text',{key:'xl'+k,x:x(k),y:B+20,textAnchor:'middle',style:{fill:'var(--muted)',fontSize:12}},lab)); } });
+    series.forEach(sr=>{
+      if (lines.hum) kids.push(h('path',{key:'hum'+sr.i,d:path(sr.pts,'hum',yh),fill:'none',strokeDasharray:'2 4',style:{stroke:sr.color,strokeWidth:1.3,opacity:.55}}));
+      if (lines.target) kids.push(h('path',{key:'tg'+sr.i,d:stepPath(sr.pts),fill:'none',strokeDasharray:'6 4',style:{stroke:single?'var(--warm-ink)':sr.color,strokeWidth:1.6,opacity:.85}}));
+      if (lines.floor) kids.push(h('path',{key:'fl'+sr.i,d:path(sr.pts,'floor',y),fill:'none',style:{stroke:single?'var(--acc)':sr.color,strokeWidth:1.8,opacity:single?1:.6}}));
+      if (lines.air) kids.push(h('path',{key:'air'+sr.i,d:path(sr.pts,'air',y),fill:'none',style:{stroke:single?'var(--ink)':sr.color,strokeWidth:2.3}}));
+    });
+    kids.push(h('line',{key:'now',x1:R,x2:R,y1:T-6,y2:B,style:{stroke:'var(--warm)',strokeWidth:2}}));
+    const ci = cursor==null ? null : Math.max(0,Math.min(N-1,cursor));
+    if (ci!=null) { kids.push(h('line',{key:'cur',x1:x(ci),x2:x(ci),y1:T-6,y2:B,strokeDasharray:'3 3',style:{stroke:'var(--ink)',strokeWidth:1.2}})); series.forEach(sr=>{ if(lines.air) kids.push(h('circle',{key:'cc'+sr.i,cx:x(ci),cy:y(sr.pts[ci].air),r:4.5,style:{fill:single?'var(--ink)':sr.color,stroke:'var(--card)',strokeWidth:2}})); }); }
+    const onPtr = (ev)=>{ if(ev.type==='pointermove'&&ev.buttons===0) return; const rect=ev.currentTarget.getBoundingClientRect(); const xf=(ev.clientX-rect.left)/rect.width*W; const k=Math.round((xf-L)/(R-L)*(N-1)); this.setState({chCursor:Math.max(0,Math.min(N-1,k))}); };
+    const svg = h('svg',{viewBox:'0 0 '+W+' '+H,style:{width:'100%',height:'auto',display:'block',touchAction:'pan-y',cursor:'crosshair',fontFamily:'inherit'},onPointerDown:onPtr,onPointerMove:onPtr},kids);
+    const pi = ci??(N-1); const pd = new Date(series[0].pts[pi].t);
+    const cursorLabel = ci==null ? (rangeH<=24?'последние 24 часа · значения сейчас':'последние 7 дней · значения сейчас') : DAYS[(pd.getDay()+6)%7]+' '+('0'+pd.getHours()).slice(-2)+':'+('0'+pd.getMinutes()).slice(-2);
+    const p0 = series[0].pts[pi];
+    const legend = single ? [
+      {label:'Воздух', color:'var(--ink)', value:p0.air.toFixed(1)+'°'},
+      {label:'Пол', color:'var(--acc)', value:p0.floor.toFixed(1)+'°'},
+      {label:'Цель', color:'var(--warm-ink)', value:p0.target.toFixed(1)+'°'},
+      {label:'Влажность', color:'var(--muted)', value:Math.round(p0.hum)+'%'},
+      {label:'Термоголовка', color:'var(--warm)', value:p0.heating?'открыта':'закрыта'} ] : [];
+    return {svg, cursorLabel, legend, series, pi, COL};
   }
   now() { const d = new Date(); return {d:(d.getDay()+6)%7, min:d.getHours()*60+d.getMinutes(), label:('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}; }
   m2t(m) { return ('0'+Math.floor(m/60)).slice(-2)+':'+('0'+(m%60)).slice(-2); }
@@ -385,6 +531,7 @@ class Component extends DCLogic {
       if(e.origin==='vac') return {text:'отпуск', bg:'var(--acc-soft)', fg:'var(--acc-ink)'};
       return null;
     };
+    const COLORS = ['#5b7fa6','#c47a5a','#5f9a6e','#8e6fae','#b8963f','#4f9a9a'];
     const navRooms = S.rooms.map((r,i)=>({ name:r.name, air:r.air.toFixed(1), heating:r.heating,
       bg: S.view===i?'var(--card)':'transparent', shadow: S.view===i?'var(--shadow)':'none',
       onSelect:()=>this.setState({view:i, edit:null}) }));
@@ -406,8 +553,10 @@ class Component extends DCLogic {
         onLockToggle:(ev)=>{ev.stopPropagation(); this.upd(rs=>{rs[i].lock=!rs[i].lock;});},
         hasBadge:!!b, badge:b?b.text:'', badgeBg:b?b.bg:'transparent', badgeFg:b?b.fg:'var(--ink)',
         menuOpen: S.menu===i, modeOptions,
+        edgeColor: (S.chartOpen && S.chSel[i]) ? COLORS[i] : 'transparent',
         onModeClick:(ev)=>{ ev.stopPropagation(); this.setState({menu: S.menu===i?null:i}); },
-        onSelect: ()=>{ if(S.menu!==null){ this.setState({menu:null}); return; } this.setState({view:i, edit:null}); },
+        onOpen:(ev)=>{ ev.stopPropagation(); this.setState({view:i, edit:null, chCursor:null}); },
+        onSelect: ()=>{ if(S.menu!==null){ this.setState({menu:null}); return; } this.setState({view:i, edit:null, chCursor:null}); },
         tempInc:(ev)=>{ev.stopPropagation(); bump(i,0.5);},
         tempDec:(ev)=>{ev.stopPropagation(); bump(i,-0.5);} };
     });
@@ -465,7 +614,30 @@ class Component extends DCLogic {
     const vacRooms=S.rooms.map((x,i)=>({name:x.name, checked:vf.rooms[i], onToggle:()=>{ const rr=vf.rooms.slice(); rr[i]=!rr[i]; this.setState({vf:{...vf,rooms:rr}}); }}));
     const fmtD=(v)=>{ if(!v) return '—'; const d=new Date(v); return isNaN(d)?v:('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+(v.length>10?' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2):''); };
     const vacStartDisabled = !vf.end || (vf.when==='plan'&&!vf.start) || !vf.rooms.some(x=>x);
+    const isRoomV = S.view>=0;
+    const chRooms = isRoomV ? [S.view] : S.chSel.map((v,i)=>v?i:-1).filter(i=>i>=0);
+    const chLines = isRoomV ? {air:true,floor:true,hum:true,target:true} : S.chLines;
+    const cb = this.buildChart(chRooms, chLines, S.chRange, S.chCursor);
+    const sheet = S.narrow && !isRoomV;
+    const ch = {
+      title: isRoomV ? 'График' : (chRooms.length===1 ? 'График · '+S.rooms[chRooms[0]].name : (chRooms.length===0 ? 'График · выберите комнаты' : 'График · '+chRooms.length+' комнат')),
+      cursorLabel: cb.cursorLabel, legend: cb.legend,
+      set24:()=>this.setState({chRange:24, chCursor:null}), set7:()=>this.setState({chRange:168, chCursor:null}),
+      bg24: S.chRange===24?'var(--card)':'transparent', bg7: S.chRange===168?'var(--card)':'transparent',
+      close:()=>this.setState({chartOpen:false, chCursor:null}),
+      open:()=>this.setState({chartOpen:true, chCursor:null}),
+      sheet, pos: sheet?'fixed':'static', maxH: sheet?'78vh':'none', radius: sheet?'18px 18px 0 0':'14px', pad: sheet?'4px 16px 20px':'16px 18px',
+      onHandleDown:(ev)=>{ ev.preventDefault(); const y0=ev.clientY; const mv=(e)=>{ if(e.clientY-y0>70){ up(); this.setState({chartOpen:false}); } }; const up=()=>{ window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); }; window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up); },
+      lineToggles: [['air','Воздух'],['floor','Пол'],['hum','Влажность'],['target','Цель']].map(([k,label])=>({ label,
+        bg: S.chLines[k]?'var(--acc-ink)':'transparent', fg: S.chLines[k]?'var(--card)':'var(--ink)',
+        onToggle:()=>this.setState({chLines:{...S.chLines,[k]:!S.chLines[k]}}) })),
+      roomsFilter: S.rooms.map((x,i)=>{ const sr=cb.series.find(s=>s.i===i); const p=sr?sr.pts[cb.pi]:null;
+        return { label:x.name, color:COLORS[i], checked:S.chSel[i], value: p? p.air.toFixed(1)+'°':'', valueColor: 'var(--ink)',
+          onToggle:()=>{ const sel=S.chSel.slice(); sel[i]=!sel[i]; this.setState({chSel:sel, chCursor:null}); } }; }),
+      hint: chRooms.length===1 ? 'Коснитесь графика или проведите по нему, чтобы увидеть значения в точке времени. Оранжевая подложка — термоголовка открыта.' : 'Сплошная линия — воздух, пунктир — цель. Подложка нагрева показывается, когда выбрана одна комната.'
+    };
     return {
+      chartOpen: !isRoomV && S.chartOpen, chartClosed: !isRoomV && !S.chartOpen, ch, chartSvg: cb.svg,
       theme, themeBtnLabel: theme==='light'?'Тёмная тема':'Светлая тема',
       toggleTheme:()=>this.setState({theme: theme==='light'?'dark':'light'}),
       nowLabel:['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'][now.d]+' '+now.label,
