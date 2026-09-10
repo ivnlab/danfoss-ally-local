@@ -9,7 +9,7 @@
 
 const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const SAT = 5;
-const STATE_LABEL = { at_home: "Дома", leaving_home: "Вне дома", holiday: "Отпуск", off: "Выкл" };
+const STATE_LABEL = { at_home: "Дома", leaving_home: "Вне дома", holiday: "Отпуск", holiday_sat: "Отпуск дома", off: "Выкл" };
 
 const pad = (n) => String(n).padStart(2, "0");
 const minToHHMM = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
@@ -83,7 +83,7 @@ class DanfossScheduleCard extends HTMLElement {
     if (!h) return "нет";
     const d = (s) => new Date(s).toLocaleDateString("ru-RU");
     const dt = (s) => new Date(s).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    return h.kind === "away" ? `вне дома ${dt(h.start)} - ${dt(h.end)}` : `дома ${d(h.start)} - ${d(h.end)} (по субботе)`;
+    return h.kind === "away" ? `вне дома ${dt(h.start)} - ${dt(h.end)}${h.temperature != null ? `, ${h.temperature}°` : ""}` : `дома ${d(h.start)} - ${d(h.end)} (по субботе)`;
   }
 
   _render() {
@@ -162,6 +162,8 @@ class DanfossScheduleCard extends HTMLElement {
             <input type="datetime-local" step="1800" data-role="hstart">
             <span>-</span>
             <input type="datetime-local" step="1800" data-role="hend">
+            <span>до</span>
+            <input type="number" min="4" max="35" step="0.5" value="15" data-role="htemp" style="width:5em"> °C
           </div>
           <div class="row" data-role="hrow-athome" hidden>
             <input type="date" data-role="hdstart">
@@ -225,6 +227,10 @@ class DanfossScheduleCard extends HTMLElement {
         start = q('[data-role="hstart"]').value; end = q('[data-role="hend"]').value;
         if (!start || !end || start >= end) { this._toast("Укажите корректные дату и время"); return; }
         start = start.replace("T", " "); end = end.replace("T", " ");
+        var temperature = parseFloat(q('[data-role="htemp"]').value);
+        if (!(temperature >= 4 && temperature <= 35) || (temperature * 2) % 1) { this._toast("Температура 4-35 с шагом 0.5"); return; }
+        this._call("set_holiday", { kind, start, end, temperature, ...(all ? { all: true } : {}) }, all ? "Отпуск задан на все термостаты" : "Отпуск задан");
+        return;
       } else {
         start = q('[data-role="hdstart"]').value; end = q('[data-role="hdend"]').value;
         if (!start || !end || start > end) { this._toast("Укажите корректные даты"); return; }

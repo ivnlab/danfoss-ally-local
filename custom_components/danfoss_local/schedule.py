@@ -3,27 +3,33 @@
 Pure logic, free of Home Assistant imports so it is unit-testable on its own.
 
 The model deliberately mirrors the Danfoss Ally app one-to-one, so that a
-program built here can be pushed to Danfoss's cloud (`wkf.week.timer.create`)
-without translation and never expresses anything the app or the thermostat
-would not understand:
+program built here can be pushed to Danfoss's cloud without translation and
+never expresses anything the app or the thermostat would not understand:
 
 - A day is a list of "at home" windows on a 30-minute grid (48 slots), each
   window at least one slot long, no overlaps. Every minute outside a window
   is "leaving home". There are no other per-slot modes.
 - Holiday comes in the app's two forms only. "Away" is a datetime range in
-  which the thermostat sits in `holiday`. "At home" is a date range during
-  which every day runs Saturday's windows (the app requires Saturday to be
-  set for this and blocks clearing it while such a holiday is planned).
+  which the thermostat sits in `holiday` at the holiday setpoint (the app asks
+  for that temperature). "At home" is a date range during which the
+  thermostat sits in `holiday_sat` and its active setpoint follows Saturday's
+  windows (at-home setpoint inside, away setpoint outside) - exactly what the
+  Danfoss cloud was observed doing on 2026-09-10.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 
 MODE_AT_HOME = "at_home"
 MODE_LEAVING_HOME = "leaving_home"
 MODE_HOLIDAY = "holiday"
+MODE_HOLIDAY_SAT = "holiday_sat"
+
+SETPOINT_AT_HOME = "at_home_setting"
+SETPOINT_LEAVING_HOME = "leaving_home_setting"
+SETPOINT_HOLIDAY = "holiday_setting"
 
 DAYS = 7           # Mon=0 .. Sun=6, as in datetime.weekday()
 SATURDAY = 5
@@ -68,11 +74,11 @@ class WeeklyProgram:
     def is_empty(self) -> bool:
         return all(not d for d in self.days)
 
+    def at_home(self, weekday: int, minute: int) -> bool:
+        return any(w.start <= minute < w.end for w in self.days[weekday])
+
     def mode_for_day(self, weekday: int, minute: int) -> str:
-        for w in self.days[weekday]:
-            if w.start <= minute < w.end:
-                return MODE_AT_HOME
-        return MODE_LEAVING_HOME
+        return MODE_AT_HOME if self.at_home(weekday, minute) else MODE_LEAVING_HOME
 
     def mode_at(self, moment: datetime) -> str:
         return self.mode_for_day(moment.weekday(), moment.hour * 60 + moment.minute)
@@ -108,12 +114,13 @@ class WeeklyProgram:
 @dataclass
 class Holiday:
     """The app's holiday: either `away` (datetime range, thermostat held in
-    `holiday`) or `at_home` (whole-day date range following Saturday's
-    windows)."""
+    `holiday` at `temperature`) or `at_home` (whole-day date range in
+    `holiday_sat`, following Saturday's windows)."""
 
     kind: str
     start: datetime          # for at_home the time part is ignored (00:00)
     end: datetime            # away: exclusive instant; at_home: inclusive date
+    temperature: float | None = None   # away only: the holiday setpoint to apply
 
     def __post_init__(self) -> None:
         if self.kind not in (HOLIDAY_AWAY, HOLIDAY_AT_HOME):
@@ -122,6 +129,11 @@ class Holiday:
             raise ValueError("holiday start must be before end")
         if self.kind == HOLIDAY_AT_HOME and self.start.date() > self.end.date():
             raise ValueError("holiday start date must not be after end date")
+        if self.temperature is not None:
+            if self.kind != HOLIDAY_AWAY:
+                raise ValueError("temperature only applies to an away holiday")
+            if not (4.0 <= self.temperature <= 35.0) or (self.temperature * 2) % 1:
+                raise ValueError("holiday temperature must be 4.0..35.0 in 0.5 steps")
 
     def active_at(self, moment: datetime) -> bool:
         if self.kind == HOLIDAY_AWAY:
@@ -129,23 +141,49 @@ class Holiday:
         return self.start.date() <= moment.date() <= self.end.date()
 
     def to_dict(self) -> dict:
-        return {"kind": self.kind, "start": self.start.isoformat(), "end": self.end.isoformat()}
+        return {
+            "kind": self.kind,
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat(),
+            "temperature": self.temperature,
+        }
 
     @classmethod
     def from_dict(cls, data: dict) -> "Holiday":
-        return cls(data["kind"], datetime.fromisoformat(data["start"]), datetime.fromisoformat(data["end"]))
+        return cls(
+            data["kind"],
+            datetime.fromisoformat(data["start"]),
+            datetime.fromisoformat(data["end"]),
+            data.get("temperature"),
+        )
+
+
+@dataclass(frozen=True)
+class Desired:
+    """What the thermostat should be doing right now: the mode dp and which
+    setpoint the active-setpoint mirror (dp114) must follow."""
+
+    mode: str
+    setpoint_code: str
+
+
+def desired_state_at(program: WeeklyProgram, moment: datetime, holiday: Holiday | None = None) -> Desired:
+    """Resolve the (mode, setpoint) the schedule dictates at `moment`."""
+    minute = moment.hour * 60 + moment.minute
+    if holiday is not None and holiday.active_at(moment):
+        if holiday.kind == HOLIDAY_AWAY:
+            return Desired(MODE_HOLIDAY, SETPOINT_HOLIDAY)
+        # At-home holiday: mode holiday_sat, setpoint tracks Saturday's windows.
+        code = SETPOINT_AT_HOME if program.at_home(SATURDAY, minute) else SETPOINT_LEAVING_HOME
+        return Desired(MODE_HOLIDAY_SAT, code)
+    if program.at_home(moment.weekday(), minute):
+        return Desired(MODE_AT_HOME, SETPOINT_AT_HOME)
+    return Desired(MODE_LEAVING_HOME, SETPOINT_LEAVING_HOME)
 
 
 def desired_mode_at(program: WeeklyProgram, moment: datetime, holiday: Holiday | None = None) -> str:
-    """Resolve the mode the schedule dictates at `moment`.
-
-    Holiday overrides the week. `away` pins `holiday`; `at_home` replays
-    Saturday's windows on every day of the range (Danfoss semantics)."""
-    if holiday is not None and holiday.active_at(moment):
-        if holiday.kind == HOLIDAY_AWAY:
-            return MODE_HOLIDAY
-        return program.mode_for_day(SATURDAY, moment.hour * 60 + moment.minute)
-    return program.mode_at(moment)
+    """Mode-only view of desired_state_at (used by the schedule sensor)."""
+    return desired_state_at(program, moment, holiday).mode
 
 
 def _hhmm(minute: int) -> str:

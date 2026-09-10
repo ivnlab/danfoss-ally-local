@@ -44,6 +44,7 @@
           "at_home": "Дома",
           "leaving_home": "Вне дома",
           "holiday": "Отпуск",
+          "holiday_sat": "Отпуск дома",
           "off": "Выкл"
         }
       }

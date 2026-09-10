@@ -44,6 +44,7 @@
           "at_home": "Home",
           "leaving_home": "Away",
           "holiday": "Holiday",
+          "holiday_sat": "Holiday at home",
           "off": "Off"
         }
       }

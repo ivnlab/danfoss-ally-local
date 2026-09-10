@@ -24,11 +24,13 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import _MODE_TO_SETPOINT, DanfossLocalCoordinator
+from .coordinator import DanfossLocalCoordinator
 from .schedule import (
     HOLIDAY_AT_HOME,
     HOLIDAY_AWAY,
+    MODE_HOLIDAY,
     SATURDAY,
+    Desired,
     Holiday,
     WeeklyProgram,
     Window,
@@ -71,7 +73,7 @@ class ScheduleManager:
         self.coordinator = coordinator
         self.engine = ScheduleEngine()
         self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self._executor = ScheduleExecutor(self.engine, self._apply_mode)
+        self._executor = ScheduleExecutor(self.engine, self._apply)
         self._listeners: list[Callable[[], None]] = []
         self._unsub_tick: Callable[[], None] | None = None
 
@@ -113,18 +115,46 @@ class ScheduleManager:
         await self._executor.async_tick(dt_util.now())
         self._notify()
 
-    async def _apply_mode(self, device_id: str, mode: str) -> None:
-        """Same write path climate.py uses for a preset change: mode dp, then
-        nudge the dp114 active-setpoint mirror to that mode's setpoint."""
-        await self.coordinator.async_set_mode(device_id, mode, optimistic_updates={"mode": mode})
+    async def _apply(self, device_id: str, desired: Desired, previous: Desired | None) -> None:
+        """Bring the thermostat to `desired`, the way the Danfoss cloud does.
+
+        Order matters because of a device quirk (confirmed 2026-09-10): writing
+        any preset setpoint makes the RT copy it into dp114 (active setpoint)
+        even if that preset is not active. So: holiday setpoint first, then
+        the mode, then explicitly nudge dp114 to the setpoint the desired
+        state wants - that last write always wins.
+        """
+        sched = self.engine.get_schedule(device_id)
         device = (self.coordinator.data or {}).get(device_id, {})
-        code = _MODE_TO_SETPOINT.get(mode)
-        target = device.get(code) if code else None
+
+        if desired.mode == MODE_HOLIDAY and sched and sched.holiday and sched.holiday.temperature is not None:
+            temp = float(sched.holiday.temperature)
+            await self.coordinator.async_set_holiday_setting(
+                device_id, temp, optimistic_updates={"holiday_setting": temp}
+            )
+            device = {**device, "holiday_setting": temp}
+
+        if previous is None or desired.mode != previous.mode:
+            await self.coordinator.async_set_mode(device_id, desired.mode, optimistic_updates={"mode": desired.mode})
+
+        target = device.get(desired.setpoint_code)
         if target is not None and "manual_mode_fast" in device:
             await self.coordinator.async_set_temperature(
                 device_id, float(target), code="manual_mode_fast",
                 optimistic_updates={"manual_mode_fast": float(target)},
             )
+
+    async def _apply_now(self, device_id: str) -> None:
+        """Immediate effect for explicit user actions (holiday set/cancel),
+        like the app: apply the current desired state and seed the baseline."""
+        sched = self.engine.get_schedule(device_id)
+        desired = sched.desired(dt_util.now()) if sched else None
+        if desired is not None:
+            try:
+                await self._apply(device_id, desired, None)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Immediate schedule write failed for %s: %s", device_id, err)
+        self.engine.seed(device_id, desired)
 
     # -- listeners for sensors ------------------------------------------
 
@@ -176,6 +206,7 @@ class ScheduleManager:
             # Same rule as the app: at-home holiday needs a Saturday program.
             raise vol.Invalid("At-home holiday requires Saturday windows to be set first")
         self.engine.set_schedule(device_id, DeviceSchedule(cur.program, holiday, cur.enabled))
+        await self._apply_now(device_id)
         await self._async_save()
 
     async def async_clear_holiday(self, device_id: str) -> None:
@@ -183,6 +214,7 @@ class ScheduleManager:
         if cur is None:
             return
         self.engine.set_schedule(device_id, DeviceSchedule(cur.program, None, cur.enabled))
+        await self._apply_now(device_id)
         await self._async_save()
 
     async def async_enable(self, device_id: str, enabled: bool) -> None:
@@ -246,7 +278,10 @@ def async_register_services(hass: HomeAssistant, get_manager: Callable[[], Sched
         kind = call.data["kind"]
         try:
             if kind == HOLIDAY_AWAY:
-                holiday = Holiday(kind, dt_util.as_local(call.data["start"]), dt_util.as_local(call.data["end"]))
+                holiday = Holiday(
+                    kind, dt_util.as_local(call.data["start"]), dt_util.as_local(call.data["end"]),
+                    call.data.get("temperature"),
+                )
             else:
                 s, e = call.data["start"], call.data["end"]
                 holiday = Holiday(kind, datetime(s.year, s.month, s.day), datetime(e.year, e.month, e.day))
@@ -285,6 +320,8 @@ def async_register_services(hass: HomeAssistant, get_manager: Callable[[], Sched
                 # parsed by cv; the handler picks the right interpretation.
                 vol.Required("start"): vol.Any(cv.datetime, cv.date),
                 vol.Required("end"): vol.Any(cv.datetime, cv.date),
+                # away only: the holiday setpoint, like the app's temperature wheel
+                vol.Optional("temperature"): vol.Coerce(float),
             }
         ),
     )

@@ -38,6 +38,9 @@ PRESET_TO_MODE = {
 }
 
 MODE_TO_PRESET = {value: key for key, value in PRESET_TO_MODE.items()}
+# The at-home holiday is its own device mode; the app shows it with the same
+# holiday icon, so present it as the holiday preset too.
+MODE_TO_PRESET["holiday_sat"] = PRESET_HOLIDAY
 
 
 async def async_setup_entry(
@@ -136,7 +139,7 @@ class DanfossLocalClimate(DanfossLocalEntity, ClimateEntity):
         work_state = self.device_value("work_state")
 
         if self._is_icon_device:
-            if mode in {"at_home", "leaving_home", "holiday", "pause"}:
+            if mode in {"at_home", "leaving_home", "holiday", "holiday_sat", "pause"}:
                 return HVACMode.AUTO
             if work_state in {"Heat", "heat_active"}:
                 if self.device_value("manual_mode_fast") == self.device_value(
@@ -154,7 +157,7 @@ class DanfossLocalClimate(DanfossLocalEntity, ClimateEntity):
 
         if mode in {"at_home", "leaving_home"}:
             return HVACMode.AUTO
-        if mode in {"manual", "pause", "holiday"}:
+        if mode in {"manual", "pause", "holiday", "holiday_sat"}:
             return HVACMode.HEAT
         return None
 
@@ -397,6 +400,10 @@ class DanfossLocalClimate(DanfossLocalEntity, ClimateEntity):
             return "manual_mode_fast"
         if mode == "holiday":
             return "holiday_setting"
+        if mode == "holiday_sat":
+            # at-home holiday follows Saturday windows; the active setpoint
+            # (dp114) is what is actually in effect, so read the mirror
+            return "manual_mode_fast"
         return "manual_mode_fast"
 
     def _get_setpoint_for_mode(self, mode: str | None) -> float | None:

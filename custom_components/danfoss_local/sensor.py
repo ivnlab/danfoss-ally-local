@@ -144,7 +144,7 @@ class DanfossLocalSensor(DanfossLocalEntity, SensorEntity):
 
 
 SCHEDULE_STATE_OFF = "off"
-SCHEDULE_STATES = ["at_home", "leaving_home", "holiday", SCHEDULE_STATE_OFF]
+SCHEDULE_STATES = ["at_home", "leaving_home", "holiday", "holiday_sat", SCHEDULE_STATE_OFF]
 
 
 class DanfossLocalScheduleSensor(DanfossLocalEntity, SensorEntity):
