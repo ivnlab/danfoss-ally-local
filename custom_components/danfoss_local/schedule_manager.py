@@ -53,9 +53,14 @@ _PROGRAM_SCHEMA = vol.Schema({vol.Required("days"): vol.All([[_WINDOW_SCHEMA]], 
 
 
 def _program_from_service(data: dict) -> WeeklyProgram:
-    return WeeklyProgram(
-        days=[[Window(hhmm_to_min(w["start"]), hhmm_to_min(w["end"])) for w in day] for day in data["days"]]
-    )
+    try:
+        return WeeklyProgram(
+            days=[[Window(hhmm_to_min(w["start"]), hhmm_to_min(w["end"])) for w in day] for day in data["days"]]
+        )
+    except ValueError as err:
+        # Model rules (30-minute grid, start < end, no overlaps) surface as a
+        # normal service validation error, not a server error.
+        raise vol.Invalid(str(err)) from err
 
 
 class ScheduleManager:
@@ -239,11 +244,14 @@ def async_register_services(hass: HomeAssistant, get_manager: Callable[[], Sched
     async def set_holiday(call: ServiceCall) -> None:
         m = mgr()
         kind = call.data["kind"]
-        if kind == HOLIDAY_AWAY:
-            holiday = Holiday(kind, dt_util.as_local(call.data["start"]), dt_util.as_local(call.data["end"]))
-        else:
-            s, e = call.data["start"], call.data["end"]
-            holiday = Holiday(kind, datetime(s.year, s.month, s.day), datetime(e.year, e.month, e.day))
+        try:
+            if kind == HOLIDAY_AWAY:
+                holiday = Holiday(kind, dt_util.as_local(call.data["start"]), dt_util.as_local(call.data["end"]))
+            else:
+                s, e = call.data["start"], call.data["end"]
+                holiday = Holiday(kind, datetime(s.year, s.month, s.day), datetime(e.year, e.month, e.day))
+        except (ValueError, AttributeError) as err:
+            raise vol.Invalid(f"invalid holiday range: {err}") from err
         for dev in targets_of(m, call):
             await m.async_set_holiday(dev, holiday)
 
