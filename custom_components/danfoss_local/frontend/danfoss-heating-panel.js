@@ -223,7 +223,7 @@ class DanfossHeatingPanel extends HTMLElement {
         : { label: "Отпуск дома", origin: "vac", until: "по субботней программе, " + until, target: r.target, vac: true };
     }
     const nc = r.nextAt ? this._untilLabel(r.nextAt) : null;
-    const untilB = "до границы расписания (" + (nc || "–") + ")";
+    const untilB = "пока не вернёте к расписанию" + (nc ? " (ближайшая граница " + nc + ")" : "");
     const schedPreset = SCHED_TO_PRESET[r.schedState] || null;
     const manual = r.hvac === "heat" || (r.preset == null && r.hvac !== "unavailable");
     if (manual) return { label: "Ручной", origin: r.source === "device" ? "device" : "panel", until: untilB, target: r.target, ovr: true };

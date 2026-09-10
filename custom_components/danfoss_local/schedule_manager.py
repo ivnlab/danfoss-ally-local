@@ -24,11 +24,12 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import DanfossLocalCoordinator
+from .coordinator import _MODE_TO_SETPOINT, DanfossLocalCoordinator
 from .schedule import (
     HOLIDAY_AT_HOME,
     HOLIDAY_AWAY,
     MODE_HOLIDAY,
+    MODE_HOLIDAY_SAT,
     SATURDAY,
     Desired,
     Holiday,
@@ -116,8 +117,26 @@ class ScheduleManager:
         await self._executor.async_tick(dt_util.now())
         self._notify()
 
-    async def _apply(self, device_id: str, desired: Desired, previous: Desired | None) -> None:
+    def _manual_override_active(self, device_id: str) -> bool:
+        """True when someone set a temporary setpoint or manual mode on this
+        thermostat. Observed live 2026-09-10 (RT5): with a temporary setpoint
+        in dp114 the Danfoss cloud does NOT switch the mode at the next
+        schedule boundary - the override stands until it is cancelled. We do
+        the same; holiday and an explicit "return to schedule" still win."""
+        device = (self.coordinator.data or {}).get(device_id, {})
+        mode = device.get("mode")
+        if mode == "manual":
+            return True
+        code = _MODE_TO_SETPOINT.get(mode)
+        active, preset = device.get("manual_mode_fast"), device.get(code) if code else None
+        return active is not None and preset is not None and abs(float(active) - float(preset)) >= 0.05
+
+    async def _apply(self, device_id: str, desired: Desired, previous: Desired | None, *, force: bool = False) -> None:
         """Bring the thermostat to `desired`, the way the Danfoss cloud does.
+
+        Scheduled boundary writes (force=False) leave a manual override alone
+        unless the desired state is a holiday; explicit user actions
+        (force=True) always apply.
 
         Order matters because of a device quirk (confirmed 2026-09-10): writing
         any preset setpoint makes the RT copy it into dp114 (active setpoint)
@@ -127,6 +146,10 @@ class ScheduleManager:
         """
         sched = self.engine.get_schedule(device_id)
         device = (self.coordinator.data or {}).get(device_id, {})
+
+        if not force and desired.mode not in (MODE_HOLIDAY, MODE_HOLIDAY_SAT) and self._manual_override_active(device_id):
+            _LOGGER.debug("Schedule boundary skipped for %s: manual override active", device_id)
+            return
 
         if desired.mode == MODE_HOLIDAY and sched and sched.holiday and sched.holiday.temperature is not None:
             temp = float(sched.holiday.temperature)
@@ -152,7 +175,7 @@ class ScheduleManager:
         desired = sched.desired(dt_util.now()) if sched else None
         if desired is not None:
             try:
-                await self._apply(device_id, desired, None)
+                await self._apply(device_id, desired, None, force=True)
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("Immediate schedule write failed for %s: %s", device_id, err)
         self.engine.seed(device_id, desired)
