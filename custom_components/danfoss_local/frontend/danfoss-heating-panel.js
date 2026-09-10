@@ -225,17 +225,19 @@ class DanfossHeatingPanel extends HTMLElement {
     const nc = r.nextAt ? this._untilLabel(r.nextAt) : null;
     const untilB = "пока не вернёте к расписанию" + (nc ? " (ближайшая граница " + nc + ")" : "");
     const schedPreset = SCHED_TO_PRESET[r.schedState] || null;
+    const origin = r.source === "device" ? "device" : "panel";
     const manual = r.hvac === "heat" || (r.preset == null && r.hvac !== "unavailable");
-    if (manual) return { label: "Ручной", origin: r.source === "device" ? "device" : "panel", until: untilB, target: r.target, ovr: true };
-    // Temporary setpoint: the active target differs from the preset's own
-    // setpoint while the preset is still home/away (set on the device or in
-    // the app). Shown as a manual override until the next boundary.
+    if (manual) return { label: "Ручной", origin, until: untilB, target: r.target, ovr: true, tempOvr: true, modeOvr: true };
+    // Two independent kinds of override, as in the Danfoss app:
+    //  - a temporary setpoint: dp114 differs from the preset's own setpoint
+    //    (cancelling it restores the preset's setpoint, mode untouched);
+    //  - a manually chosen mode that differs from what the schedule says
+    //    (cancelling it means "return to schedule").
     const presetSp = r.preset === "home" ? r.sp.home : r.preset === "away" ? r.sp.away : null;
-    if (presetSp != null && r.target != null && Math.abs(r.target - presetSp) >= 0.05) {
-      return { label: "Ручной", origin: r.source === "device" ? "device" : "panel", until: untilB, target: r.target, ovr: true };
-    }
-    if (r.enabled && schedPreset && r.preset && r.preset !== schedPreset) {
-      return { label: MODE_LABEL[r.preset] || r.preset, origin: r.source === "device" ? "device" : "panel", until: untilB, target: r.target, ovr: true };
+    const tempOvr = presetSp != null && r.target != null && Math.abs(r.target - presetSp) >= 0.05;
+    const modeOvr = !!(r.enabled && schedPreset && r.preset && r.preset !== schedPreset);
+    if (tempOvr || modeOvr) {
+      return { label: tempOvr ? "Ручной" : (MODE_LABEL[r.preset] || r.preset), origin, until: untilB, target: r.target, ovr: true, tempOvr, modeOvr };
     }
     if (!r.enabled) return { label: MODE_LABEL[r.preset] || "–", origin: "schedule", until: r.hasProgram ? "расписание выключено" : "расписания нет", target: r.target };
     const nm = r.nextMode ? (MODE_LABEL[SCHED_TO_PRESET[r.nextMode]] || r.nextMode) : null;
@@ -522,7 +524,7 @@ class DanfossHeatingPanel extends HTMLElement {
             <div class="tchip"><div class="stat" style="color:${r.heating ? "var(--warm-ink)" : "var(--ink)"}">${f1(e.target)}°</div>
               <button class="rb" data-act="sel-dec" aria-label="Убавить" ${vacd ? "disabled" : ""}>−</button><button class="rb" data-act="sel-inc" aria-label="Прибавить" ${vacd ? "disabled" : ""}>+</button></div>
             <div class="muted" style="font-size:12px;margin-top:3px;padding-left:16px">цель · ${r.heating ? "греет" : "не греет"}</div></div></div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${quick}${e.ovr && !vacd ? `<button class="link" data-act="resume">Вернуться к расписанию</button>` : ""}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${quick}${e.tempOvr && !vacd ? `<button class="link" data-act="cancel-temp">Снять временную уставку</button>` : ""}${e.modeOvr && !vacd ? `<button class="link" data-act="resume">Вернуться к расписанию</button>` : ""}</div>
         ${vacd ? `<div class="muted" style="margin-top:8px;font-size:12.5px">Быстрые режимы недоступны, пока действует отпуск</div>` : ""}
       </div>
       ${this._chartBlock([r], true)}
@@ -583,6 +585,7 @@ class DanfossHeatingPanel extends HTMLElement {
           case "sel-dec": return this._bump(cur(), -0.5);
           case "quick": return el.dataset.on === "1" ? this._resume(cur()) : this._preset(cur(), el.dataset.m);
           case "resume": return this._resume(cur());
+          case "cancel-temp": { const r0 = cur(); if (r0.preset) this._preset(r0, r0.preset); return; }
           case "sp-inc": return this._setpoint(cur(), el.dataset.k, 0.5);
           case "sp-dec": return this._setpoint(cur(), el.dataset.k, -0.5);
           case "sched-toggle": return this._svc("enable_schedule", { device_id: cur().devId, enabled: !cur().enabled });
