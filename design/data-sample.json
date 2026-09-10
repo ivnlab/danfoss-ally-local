@@ -1,0 +1,418 @@
+{
+  "note": "Live sample of one thermostat (RT6) as Home Assistant exposes it, plus the schedule services. Other 5 thermostats have identical entity sets.",
+  "entities": {
+    "climate.icon2_rt_6": {
+      "state": "auto",
+      "attributes": {
+        "hvac_modes": [
+          "auto",
+          "heat"
+        ],
+        "min_temp": 4.0,
+        "max_temp": 35.0,
+        "target_temp_step": 0.5,
+        "preset_modes": [
+          "home",
+          "away",
+          "pause",
+          "holiday"
+        ],
+        "current_temperature": 22.5,
+        "temperature": 19.0,
+        "hvac_action": "idle",
+        "preset_mode": "away",
+        "entity_picture": "https://www.zigbee2mqtt.io/images/devices/Icon2.png",
+        "friendly_name": "Icon2 RT 6",
+        "supported_features": 17
+      }
+    },
+    "sensor.icon2_rt_6_air_temperature": {
+      "state": "22.5",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 t° воздуха"
+      }
+    },
+    "sensor.icon2_rt_6_floor_temperature": {
+      "state": "21.7",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 t° пола"
+      }
+    },
+    "sensor.icon2_rt_6_humidity": {
+      "state": "49.0",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "%",
+        "device_class": "humidity",
+        "friendly_name": "Icon2 RT 6 Влажность"
+      }
+    },
+    "sensor.icon2_rt_6_battery": {
+      "state": "65",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "%",
+        "device_class": "battery",
+        "friendly_name": "Icon2 RT 6 Заряд батареи"
+      }
+    },
+    "sensor.icon2_rt_6_setpoint_change_source": {
+      "state": "Externally",
+      "attributes": {
+        "options": [
+          "Manual",
+          "Externally",
+          "schedule"
+        ],
+        "device_class": "enum",
+        "friendly_name": "Icon2 RT 6 Источник изменения уставки"
+      }
+    },
+    "sensor.icon2_rt_6_schedule": {
+      "state": "off",
+      "attributes": {
+        "options": [
+          "at_home",
+          "leaving_home",
+          "holiday",
+          "holiday_sat",
+          "off"
+        ],
+        "enabled": false,
+        "program": null,
+        "holiday": null,
+        "next_change_at": null,
+        "next_mode": null,
+        "device_class": "enum",
+        "icon": "mdi:calendar-clock",
+        "friendly_name": "Icon2 RT 6 Расписание"
+      }
+    },
+    "binary_sensor.icon2_rt_6_thermal_actuator": {
+      "state": "off",
+      "attributes": {
+        "device_class": "opening",
+        "icon": "mdi:pipe-valve",
+        "friendly_name": "Icon2 RT 6 Термоголовка"
+      }
+    },
+    "binary_sensor.icon2_rt_6_fault": {
+      "state": "off",
+      "attributes": {
+        "device_class": "problem",
+        "friendly_name": "Icon2 RT 6 Неисправность"
+      }
+    },
+    "binary_sensor.icon2_rt_6_setpoint_changed_locally": {
+      "state": "off",
+      "attributes": {
+        "friendly_name": "Icon2 RT 6 Уставка изменена локально"
+      }
+    },
+    "binary_sensor.icon2_rt_6_child_lock": {
+      "state": "off",
+      "attributes": {
+        "device_class": "lock",
+        "friendly_name": "Icon2 RT 6 Замок от детей"
+      }
+    },
+    "number.icon2_rt_6_upper_temperature": {
+      "state": "35.0",
+      "attributes": {
+        "min": 4.0,
+        "max": 35.0,
+        "step": 0.5,
+        "mode": "auto",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 Верхний предел t°"
+      }
+    },
+    "number.icon2_rt_6_lower_temperature": {
+      "state": "4.0",
+      "attributes": {
+        "min": 4.0,
+        "max": 35.0,
+        "step": 0.5,
+        "mode": "auto",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 Нижний предел t°"
+      }
+    },
+    "number.icon2_rt_6_home_temperature": {
+      "state": "22.0",
+      "attributes": {
+        "min": 4.0,
+        "max": 35.0,
+        "step": 0.5,
+        "mode": "auto",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 t° дома"
+      }
+    },
+    "number.icon2_rt_6_away_temperature": {
+      "state": "19.0",
+      "attributes": {
+        "min": 4.0,
+        "max": 35.0,
+        "step": 0.5,
+        "mode": "auto",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 t° вне дома"
+      }
+    },
+    "number.icon2_rt_6_pause_temperature": {
+      "state": "5.0",
+      "attributes": {
+        "min": 4.0,
+        "max": 35.0,
+        "step": 0.5,
+        "mode": "auto",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 t° паузы"
+      }
+    },
+    "number.icon2_rt_6_holiday_temperature": {
+      "state": "22.0",
+      "attributes": {
+        "min": 4.0,
+        "max": 35.0,
+        "step": 0.5,
+        "mode": "auto",
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "friendly_name": "Icon2 RT 6 t° на выходных"
+      }
+    },
+    "switch.icon2_rt_6_pre_heat": {
+      "state": "off",
+      "attributes": {
+        "icon": "mdi:heat-wave",
+        "friendly_name": "Icon2 RT 6 Преднагрев"
+      }
+    },
+    "lock.icon2_rt_6_child_lock": {
+      "state": "locked",
+      "attributes": {
+        "friendly_name": "Icon2 RT 6 Замок от детей",
+        "supported_features": 0
+      }
+    }
+  },
+  "services": {
+    "set_schedule": {
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "HA device id of the thermostat (or its raw Tuya device_id). Ignored when \"all\" is set.",
+          "required": false,
+          "selector": {
+            "device": {
+              "integration": "danfoss_local",
+              "multiple": false
+            }
+          }
+        },
+        "all": {
+          "name": "All thermostats",
+          "description": "Apply to every thermostat instead of one device.",
+          "required": false,
+          "selector": {
+            "boolean": {}
+          }
+        },
+        "program": {
+          "name": "Program",
+          "description": "{\"days\": [[{\"start\": \"06:00\", \"end\": \"08:00\"}, {\"start\": \"16:00\", \"end\": \"22:30\"}], [], [], [], [], [], []]}",
+          "required": true,
+          "selector": {
+            "object": {
+              "multiple": false
+            }
+          }
+        },
+        "enabled": {
+          "name": "Enabled",
+          "description": "Leave the schedule enabled/disabled after saving (unchanged if omitted).",
+          "required": false,
+          "selector": {
+            "boolean": {}
+          }
+        }
+      },
+      "description": "Replace a thermostat's weekly program in the Danfoss Ally shape - 7 days (Mon..Sun) of \"at home\" windows on a 30-minute grid; everything outside a window is \"away\".",
+      "name": "Set weekly schedule"
+    },
+    "clear_schedule": {
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "required": false,
+          "selector": {
+            "device": {
+              "integration": "danfoss_local",
+              "multiple": false
+            }
+          }
+        },
+        "all": {
+          "name": "All thermostats",
+          "required": false,
+          "selector": {
+            "boolean": {}
+          }
+        }
+      },
+      "description": "Remove the thermostat's program entirely (HA stops driving it).",
+      "name": "Clear weekly schedule"
+    },
+    "copy_schedule": {
+      "fields": {
+        "device_id": {
+          "name": "Source device",
+          "required": true,
+          "selector": {
+            "device": {
+              "integration": "danfoss_local",
+              "multiple": false
+            }
+          }
+        },
+        "targets": {
+          "name": "Target devices",
+          "required": false,
+          "selector": {
+            "device": {
+              "multiple": true,
+              "integration": "danfoss_local"
+            }
+          }
+        }
+      },
+      "description": "Copy one thermostat's weekly program to the given targets (all thermostats if targets is omitted). Holidays and enabled flags of the targets are kept.",
+      "name": "Copy schedule to other thermostats"
+    },
+    "set_holiday": {
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "required": false,
+          "selector": {
+            "device": {
+              "integration": "danfoss_local",
+              "multiple": false
+            }
+          }
+        },
+        "all": {
+          "name": "All thermostats",
+          "required": false,
+          "selector": {
+            "boolean": {}
+          }
+        },
+        "kind": {
+          "name": "Kind",
+          "required": true,
+          "selector": {
+            "select": {
+              "options": [
+                "away",
+                "at_home"
+              ],
+              "multiple": false,
+              "custom_value": false,
+              "sort": false
+            }
+          }
+        },
+        "start": {
+          "name": "Start",
+          "description": "Datetime for \"away\" (e.g. 2026-12-24 18:00), date for \"at_home\" (2026-12-24).",
+          "required": true,
+          "selector": {
+            "text": {
+              "multiline": false,
+              "multiple": false
+            }
+          }
+        },
+        "end": {
+          "name": "End",
+          "description": "Datetime for \"away\", inclusive date for \"at_home\".",
+          "required": true,
+          "selector": {
+            "text": {
+              "multiline": false,
+              "multiple": false
+            }
+          }
+        }
+      },
+      "description": "Danfoss-style holiday. \"away\" holds the thermostat in holiday mode between two datetimes; \"at_home\" replays Saturday's windows on every day of a date range (Saturday must be set).",
+      "name": "Set holiday"
+    },
+    "clear_holiday": {
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "required": false,
+          "selector": {
+            "device": {
+              "integration": "danfoss_local",
+              "multiple": false
+            }
+          }
+        },
+        "all": {
+          "name": "All thermostats",
+          "required": false,
+          "selector": {
+            "boolean": {}
+          }
+        }
+      },
+      "name": "Clear holiday"
+    },
+    "enable_schedule": {
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "required": false,
+          "selector": {
+            "device": {
+              "integration": "danfoss_local",
+              "multiple": false
+            }
+          }
+        },
+        "all": {
+          "name": "All thermostats",
+          "required": false,
+          "selector": {
+            "boolean": {}
+          }
+        },
+        "enabled": {
+          "name": "Enabled",
+          "required": true,
+          "selector": {
+            "boolean": {}
+          }
+        }
+      },
+      "description": "Pause the weekly program without deleting it.",
+      "name": "Enable or disable schedule"
+    }
+  }
+}
