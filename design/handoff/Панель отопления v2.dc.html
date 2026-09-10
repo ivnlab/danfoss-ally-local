@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;background:#f4f5f7}
+  a{color:#4c637d}a:hover{color:#2a2d32}
+  .hp{--bg:#f4f5f7;--card:#ffffff;--ink:#2a2d32;--muted:#73787f;--soft:#e4e7eb;--line:#d3d7dc;--acc:#8fa5bd;--acc-soft:#dce5ee;--acc-ink:#4c637d;--warm:#dfa075;--warm-soft:#f6e3d7;--warm-ink:#9c5f33;--ok:#3f9163;--on-acc:#ffffff;--shadow:0 1px 3px rgba(30,35,45,.10),0 1px 2px rgba(30,35,45,.06)}
+  .hp[data-theme="dark"]{--bg:#14161a;--card:#1e2127;--ink:#e6e8eb;--muted:#9aa0a8;--soft:#2c3038;--line:#3a3f47;--acc:#8fa5bd;--acc-soft:#2e3947;--acc-ink:#b7c7da;--warm:#d9976f;--warm-soft:#3d3026;--warm-ink:#e5b491;--ok:#8ecfa4;--on-acc:#14161a;--shadow:0 1px 3px rgba(0,0,0,.4)}
+  .hp button{font-family:inherit}
+  .hp :focus-visible{outline:2px solid var(--acc-ink);outline-offset:2px}
+  .hp ::selection{background:var(--acc-soft)}
+  .hp input,.hp select{font-family:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px}
+  .hp input[type="checkbox"]{width:22px;height:22px;accent-color:var(--acc-ink);padding:0;margin:0}
+  .hp-side{width:232px;flex:none}
+  .hp-side-list{display:flex;flex-direction:column;gap:4px}
+  @media(max-width:760px){
+    .hp-side{width:100%}
+    .hp-side-list{flex-direction:row;overflow-x:auto;padding-bottom:6px}
+    .hp-side-list>*{flex:none}
+  }
+</style>
+</helmet>
+<div class="hp" data-theme="{{ theme }}" style="min-height:100vh;background:var(--bg);color:var(--ink);font-family:'Roboto',system-ui,sans-serif;font-size:15px;line-height:1.45">
+  <div style="max-width:1280px;margin:0 auto;padding:16px 16px 32px;display:flex;flex-direction:column;gap:14px">
+
+    <header style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:2px 4px 0">
+      <div style="font-size:22px;font-weight:500">Тёплый пол</div>
+      <div style="color:var(--muted);font-size:13.5px">Danfoss Icon2 · {{ nowLabel }}</div>
+      <div style="flex:1"></div>
+      <button onClick="{{ toggleTheme }}" style="border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 16px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="background:var(--soft)">{{ themeBtnLabel }}</button>
+    </header>
+
+    <sc-if value="{{ vacActive }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px;background:var(--acc-soft);border:1px solid var(--acc);border-radius:14px">
+        <div style="font-weight:700;font-size:14.5px;color:var(--acc-ink)">Отпуск активен</div>
+        <div style="font-size:14px">{{ vacSummary }}</div>
+        <div style="flex:1"></div>
+        <button onClick="{{ vacEdit }}" style="border:1px solid var(--acc-ink);background:transparent;color:var(--acc-ink);padding:9px 16px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="background:var(--card)">Исправить</button>
+        <button onClick="{{ vacClear }}" style="border:none;background:var(--acc-ink);color:var(--card);padding:10px 16px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="opacity:.9">Выйти из режима</button>
+      </div>
+    </sc-if>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+      <aside class="hp-side">
+        <div class="hp-side-list">
+          <div onClick="{{ goSummary }}" role="button" tabindex="0" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;cursor:pointer;background:{{ summaryBg }};box-shadow:{{ summaryShadow }};font-weight:500;min-height:20px" style-hover="background:var(--card)">
+            Сводка
+          </div>
+          <div style="height:1px;background:var(--line);margin:6px 4px"></div>
+          <sc-for list="{{ navRooms }}" as="n" hint-placeholder-count="6">
+            <div onClick="{{ n.onSelect }}" role="button" tabindex="0" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:12px;cursor:pointer;background:{{ n.bg }};box-shadow:{{ n.shadow }}" style-hover="background:var(--card)">
+              <div style="flex:1;min-width:0;font-weight:500;white-space:nowrap">{{ n.name }}</div>
+              <sc-if value="{{ n.heating }}" hint-placeholder-val="{{ false }}"><div title="Греет" style="width:9px;height:9px;border-radius:50%;background:var(--warm)"></div></sc-if>
+              <div style="font-size:14px;font-variant-numeric:tabular-nums;color:var(--muted)">{{ n.air }}°</div>
+            </div>
+          </sc-for>
+        </div>
+      </aside>
+
+      <div style="flex:1;min-width:min(100%,340px);display:flex;flex-direction:column;gap:14px">
+
+        <sc-if value="{{ isSummary }}" hint-placeholder-val="{{ true }}">
+          <section style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">
+            <sc-for list="{{ rooms }}" as="r" hint-placeholder-count="6">
+              <div onClick="{{ r.onSelect }}" role="button" tabindex="0" style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);cursor:pointer;border:2px solid transparent" style-hover="border-color:var(--acc)">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="font-weight:500;font-size:15px;min-width:0">{{ r.name }}</div>
+                  <button onClick="{{ r.onLockToggle }}" title="{{ r.lockTitle }}" aria-label="{{ r.lockTitle }}" style="border:none;background:transparent;cursor:pointer;padding:6px;margin:-6px 0;color:{{ r.lockColor }};display:flex;align-items:center" style-hover="opacity:.7">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="{{ r.lockPath }}"></path></svg>
+                  </button>
+                  <div style="flex:1"></div>
+                  <sc-if value="{{ r.fault }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;font-weight:500;color:var(--warm-ink);background:var(--warm-soft);padding:2px 8px;border-radius:9px">неиспр.</div></sc-if>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                  <div style="font-size:42px;font-weight:400;font-variant-numeric:tabular-nums;line-height:1">{{ r.air }}°</div>
+                  <div style="font-size:15px;color:var(--muted);line-height:1.45">пол {{ r.floor }}°<br>влажн. {{ r.hum }}%</div>
+                  <div style="flex:1"></div>
+                  <div style="display:flex;align-items:center;background:var(--soft);border-radius:24px;padding:3px">
+                    <button onClick="{{ r.tempDec }}" aria-label="Убавить" style="width:44px;height:44px;border:none;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer;padding:0;border-radius:50%" style-hover="background:var(--acc-soft)">−</button>
+                    <div style="min-width:56px;text-align:center;font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;color:{{ r.targetColor }}">{{ r.target }}°</div>
+                    <button onClick="{{ r.tempInc }}" aria-label="Прибавить" style="width:44px;height:44px;border:none;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer;padding:0;border-radius:50%" style-hover="background:var(--acc-soft)">+</button>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:22px">
+                  <div style="position:relative;flex:none">
+                    <button onClick="{{ r.onModeClick }}" style="border:none;font-family:inherit;font-size:12.5px;font-weight:500;background:var(--soft);color:var(--ink);padding:7px 11px;border-radius:14px;cursor:pointer" style-hover="background:var(--acc-soft)">{{ r.modeLabel }} ▾</button>
+                    <sc-if value="{{ r.menuOpen }}" hint-placeholder-val="{{ false }}">
+                      <div style="position:absolute;top:calc(100% + 4px);left:0;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:4px;min-width:140px;display:flex;flex-direction:column">
+                        <sc-for list="{{ r.modeOptions }}" as="mo" hint-placeholder-count="4">
+                          <button onClick="{{ mo.onPick }}" style="border:none;background:{{ mo.bg }};color:var(--ink);font-size:13.5px;font-weight:500;text-align:left;padding:10px 12px;border-radius:9px;cursor:pointer" style-hover="background:var(--acc-soft)">{{ mo.label }}</button>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ r.hasBadge }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11.5px;font-weight:500;padding:3px 9px;border-radius:9px;background:{{ r.badgeBg }};color:{{ r.badgeFg }}">{{ r.badge }}</div>
+                  </sc-if>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="font-size:12.5px;color:var(--muted);flex:1">термоголовка <span style="font-weight:700;color:{{ r.valveColor }}">{{ r.valveLabel }}</span></div>
+                  <div title="{{ r.heatTitle }}" style="color:{{ r.heatColor }};display:flex;align-items:center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </section>
+
+          <section style="background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <div style="font-size:16px;font-weight:500">Отпуск</div>
+              <div style="color:var(--muted);font-size:13px">действует на весь дом, поверх расписаний</div>
+              <div style="flex:1"></div>
+              <sc-if value="{{ vacFormClosed }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ vacOpenForm }}" style="border:1px solid var(--line);background:transparent;color:var(--ink);padding:10px 16px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="background:var(--soft)">{{ vacOpenLabel }}</button>
+              </sc-if>
+            </div>
+            <sc-if value="{{ vacFormOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:16px">
+                <div style="flex:1 1 220px">
+                  <div style="font-size:12px;color:var(--muted);font-weight:500;margin-bottom:8px">1 · Вид отпуска</div>
+                  <div style="display:flex;background:var(--soft);border-radius:22px;padding:3px;width:fit-content">
+                    <sc-for list="{{ vacKinds }}" as="k" hint-placeholder-count="2">
+                      <button onClick="{{ k.onClick }}" disabled="{{ k.disabled }}" title="{{ k.title }}" style="border:none;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;background:{{ k.bg }};color:{{ k.fg }};opacity:{{ k.op }};min-height:42px;border-radius:19px">{{ k.label }}</button>
+                    </sc-for>
+                  </div>
+                  <div style="font-size:12.5px;color:var(--muted);margin-top:8px;max-width:300px">{{ vacKindHint }}</div>
+                </div>
+                <div style="flex:1 1 240px">
+                  <div style="font-size:12px;color:var(--muted);font-weight:500;margin-bottom:8px">2 · Когда</div>
+                  <div style="display:flex;background:var(--soft);border-radius:22px;padding:3px;width:fit-content;margin-bottom:10px">
+                    <sc-for list="{{ vacWhens }}" as="k" hint-placeholder-count="2">
+                      <button onClick="{{ k.onClick }}" style="border:none;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;background:{{ k.bg }};color:{{ k.fg }};min-height:42px;border-radius:19px">{{ k.label }}</button>
+                    </sc-for>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px;max-width:280px">
+                    <sc-if value="{{ vacShowStart }}" hint-placeholder-val="{{ false }}">
+                      <label style="font-size:12.5px;color:var(--muted)">Начало<br><input type="{{ vacDateType }}" value="{{ vacStart }}" onChange="{{ onVacStart }}" style="width:100%;box-sizing:border-box;margin-top:3px"></label>
+                    </sc-if>
+                    <label style="font-size:12.5px;color:var(--muted)">Конец<br><input type="{{ vacDateType }}" value="{{ vacEnd }}" onChange="{{ onVacEnd }}" style="width:100%;box-sizing:border-box;margin-top:3px"></label>
+                  </div>
+                </div>
+                <div style="flex:1 1 200px">
+                  <div style="font-size:12px;color:var(--muted);font-weight:500;margin-bottom:8px">3 · Где</div>
+                  <div style="display:flex;flex-direction:column;gap:2px">
+                    <sc-for list="{{ vacRooms }}" as="vr" hint-placeholder-count="6">
+                      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14.5px;min-height:38px"><input type="checkbox" checked="{{ vr.checked }}" onChange="{{ vr.onToggle }}">{{ vr.name }}</label>
+                    </sc-for>
+                  </div>
+                </div>
+                <sc-if value="{{ vacIsAway }}" hint-placeholder-val="{{ true }}">
+                  <div style="flex:0 1 200px">
+                    <div style="font-size:12px;color:var(--muted);font-weight:500;margin-bottom:8px">4 · До какой t°</div>
+                    <div style="display:flex;align-items:center;background:var(--soft);border-radius:24px;padding:3px;width:fit-content">
+                      <button onClick="{{ vacTempDec }}" style="width:44px;height:44px;border:none;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer;border-radius:50%" style-hover="background:var(--acc-soft)">−</button>
+                      <div style="padding:6px 14px;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums">{{ vacTemp }}°</div>
+                      <button onClick="{{ vacTempInc }}" style="width:44px;height:44px;border:none;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer;border-radius:50%" style-hover="background:var(--acc-soft)">+</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:18px;align-items:center;flex-wrap:wrap">
+                <button onClick="{{ vacStartAction }}" disabled="{{ vacStartDisabled }}" style="border:none;background:var(--acc-ink);color:var(--card);padding:12px 20px;font-size:14px;font-weight:500;cursor:pointer;border-radius:22px;opacity:{{ vacStartOpacity }}" style-hover="opacity:.9">{{ vacStartLabel }}</button>
+                <button onClick="{{ vacCancelForm }}" style="border:none;background:transparent;color:var(--muted);font-size:13.5px;font-weight:500;cursor:pointer;padding:12px 8px">Отмена</button>
+                <div style="font-size:12.5px;color:var(--muted)">{{ vacFormNote }}</div>
+              </div>
+            </sc-if>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ isRoom }}" hint-placeholder-val="{{ false }}">
+          <section style="background:var(--card);border-radius:14px;box-shadow:var(--shadow)">
+            <div style="padding:18px 20px;border-bottom:1px solid var(--soft)">
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <h2 style="margin:0;font-size:18px;font-weight:500">{{ sel.name }}</h2>
+                <div style="color:var(--muted);font-size:13.5px">{{ sel.whyLine }}</div>
+              </div>
+              <sc-if value="{{ sel.fault }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:10px;padding:8px 12px;background:var(--warm-soft);color:var(--warm-ink);font-weight:500;font-size:13.5px;display:inline-block;border-radius:10px">Неисправность термостата — проверьте устройство</div>
+              </sc-if>
+              <div style="display:flex;align-items:baseline;gap:24px;flex-wrap:wrap;margin-top:14px">
+                <div><div style="font-size:40px;font-weight:400;font-variant-numeric:tabular-nums;line-height:1.05">{{ sel.air }}°</div><div style="font-size:12px;color:var(--muted)">воздух</div></div>
+                <div><div style="font-size:40px;font-weight:400;font-variant-numeric:tabular-nums;line-height:1.05">{{ sel.floor }}°</div><div style="font-size:12px;color:var(--muted)">пол</div></div>
+                <div><div style="font-size:40px;font-weight:400;font-variant-numeric:tabular-nums;line-height:1.05">{{ sel.hum }}%</div><div style="font-size:12px;color:var(--muted)">влажность</div></div>
+                <div style="display:flex;align-items:baseline;gap:10px">
+                  <div style="font-size:40px;font-weight:400;line-height:1.05;color:var(--muted)">→</div>
+                  <div>
+                    <div style="display:flex;align-items:baseline;gap:8px;background:var(--soft);border-radius:28px;padding:3px 3px 3px 16px">
+                      <div style="font-size:40px;font-weight:400;font-variant-numeric:tabular-nums;line-height:1.05;color:{{ sel.targetColor }}">{{ sel.target }}°</div>
+                      <button onClick="{{ selTempDec }}" aria-label="Убавить" style="width:44px;height:44px;border:none;background:var(--card);color:var(--ink);font-size:20px;line-height:44px;cursor:pointer;padding:0;border-radius:50%;align-self:center" style-hover="background:var(--acc-soft)">−</button>
+                      <button onClick="{{ selTempInc }}" aria-label="Прибавить" style="width:44px;height:44px;border:none;background:var(--card);color:var(--ink);font-size:20px;line-height:44px;cursor:pointer;padding:0;border-radius:50%;align-self:center" style-hover="background:var(--acc-soft)">+</button>
+                    </div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:3px;padding-left:16px">цель · {{ sel.heatLabel }}</div>
+                  </div>
+                </div>
+                <div style="flex:1"></div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+                <sc-for list="{{ quick }}" as="q" hint-placeholder-count="3">
+                  <button onClick="{{ q.onClick }}" disabled="{{ vacDisabled }}" style="border:1px solid var(--line);padding:11px 16px;font-size:14px;font-weight:500;cursor:pointer;background:{{ q.bg }};color:{{ q.fg }};opacity:{{ quickOpacity }};min-height:44px;border-radius:22px" style-hover="border-color:var(--acc-ink)">{{ q.label }}</button>
+                </sc-for>
+                <sc-if value="{{ sel.hasOverride }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ clearOverride }}" style="border:none;background:transparent;color:var(--acc-ink);font-size:14px;font-weight:500;cursor:pointer;text-decoration:underline;padding:11px 6px">Вернуться к расписанию</button>
+                </sc-if>
+              </div>
+              <sc-if value="{{ vacDisabled }}" hint-placeholder-val="{{ false }}"><div style="margin-top:8px;font-size:12.5px;color:var(--muted)">Быстрые режимы недоступны, пока действует отпуск</div></sc-if>
+            </div>
+
+            <div style="padding:16px 20px;border-bottom:1px solid var(--soft)">
+              <div style="font-size:13px;font-weight:500;color:var(--muted);margin-bottom:10px">Уставки режимов</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <sc-for list="{{ setpoints }}" as="s" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:4px;background:var(--soft);border-radius:24px;padding:3px 3px 3px 14px">
+                    <div style="min-width:74px">
+                      <div style="font-size:11.5px;color:var(--muted)">{{ s.label }}</div>
+                      <div style="font-size:16px;font-weight:700;font-variant-numeric:tabular-nums">{{ s.val }}°</div>
+                    </div>
+                    <button onClick="{{ s.dec }}" aria-label="Уменьшить" style="width:42px;height:42px;border:none;background:var(--card);color:var(--ink);font-size:19px;cursor:pointer;border-radius:50%" style-hover="background:var(--acc-soft)">−</button>
+                    <button onClick="{{ s.inc }}" aria-label="Увеличить" style="width:42px;height:42px;border:none;background:var(--card);color:var(--ink);font-size:19px;cursor:pointer;border-radius:50%" style-hover="background:var(--acc-soft)">+</button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="padding:16px 20px;border-bottom:1px solid var(--soft)">
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+                <div style="font-size:13px;font-weight:500;color:var(--muted)">Недельное расписание</div>
+                <button onClick="{{ toggleSchedule }}" style="border:none;background:{{ schedTgBg }};color:{{ schedTgFg }};padding:8px 14px;font-size:12.5px;font-weight:500;cursor:pointer;border-radius:16px">{{ schedTgLabel }}</button>
+                <div style="flex:1"></div>
+                <button onClick="{{ applyStd }}" style="border:none;background:transparent;color:var(--acc-ink);font-size:13px;font-weight:500;text-decoration:underline;cursor:pointer;padding:8px 0">Стандартное расписание</button>
+                <button onClick="{{ copyAll }}" style="border:none;background:transparent;color:var(--acc-ink);font-size:13px;font-weight:500;text-decoration:underline;cursor:pointer;padding:8px 0">{{ copyLabel }}</button>
+              </div>
+              <div style="font-size:13px;color:var(--muted);margin-bottom:12px">{{ schedHint }}</div>
+              <div style="display:flex;gap:8px;margin:0 0 4px 40px;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums">
+                <div style="flex:1;display:flex;justify-content:space-between"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div><div style="width:40px"></div>
+              </div>
+              <sc-for list="{{ days }}" as="d" hint-placeholder-count="7">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                  <div style="width:32px;font-size:13px;font-weight:{{ d.w }};color:{{ d.color }}">{{ d.label }}</div>
+                  <div data-bar="1" style="flex:1;position:relative;height:40px;border-radius:8px;background:var(--soft);background-image:repeating-linear-gradient(to right,var(--line) 0 1px,transparent 1px calc(100%/8))">
+                    <sc-for list="{{ d.windows }}" as="w" hint-placeholder-count="1">
+                      <div onClick="{{ w.onEdit }}" role="button" title="{{ w.title }}" style="position:absolute;top:3px;bottom:3px;left:{{ w.left }};width:{{ w.width }};background:{{ w.bg }};cursor:pointer;border-radius:6px;border:{{ w.border }}">
+                        <div onPointerDown="{{ w.onDragL }}" style="position:absolute;left:-6px;top:0;bottom:0;width:16px;cursor:ew-resize;touch-action:none;display:flex;align-items:center;justify-content:center"><div style="width:3px;height:16px;border-radius:2px;background:var(--acc-ink);opacity:.75"></div></div>
+                        <div onPointerDown="{{ w.onDragR }}" style="position:absolute;right:-6px;top:0;bottom:0;width:16px;cursor:ew-resize;touch-action:none;display:flex;align-items:center;justify-content:center"><div style="width:3px;height:16px;border-radius:2px;background:var(--acc-ink);opacity:.75"></div></div>
+                      </div>
+                    </sc-for>
+                    <sc-if value="{{ d.isToday }}" hint-placeholder-val="{{ false }}">
+                      <div style="position:absolute;top:-3px;bottom:-3px;left:{{ nowLeft }};width:2px;background:var(--warm);pointer-events:none"></div>
+                    </sc-if>
+                  </div>
+                  <button onClick="{{ d.onAdd }}" title="Добавить окно" style="width:40px;height:40px;border:1px dashed var(--line);background:transparent;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:0;border-radius:10px" style-hover="border-color:var(--acc-ink);color:var(--acc-ink)">+</button>
+                </div>
+              </sc-for>
+              <div style="font-size:12px;color:var(--muted);margin:4px 0 0 40px">Потяните за края окна, чтобы изменить время (сетка 30 минут), или нажмите на окно для точной правки.</div>
+              <sc-if value="{{ editOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:14px;background:var(--soft);border-radius:12px">
+                  <div style="font-weight:500;font-size:14px">{{ editDayLabel }} · окно «дома»</div>
+                  <select value="{{ editStart }}" onChange="{{ onEditStart }}">
+                    <sc-for list="{{ startOpts }}" as="t" hint-placeholder-count="4"><option value="{{ t.v }}">{{ t.label }}</option></sc-for>
+                  </select>
+                  <span style="color:var(--muted)">—</span>
+                  <select value="{{ editEnd }}" onChange="{{ onEditEnd }}">
+                    <sc-for list="{{ endOpts }}" as="t" hint-placeholder-count="4"><option value="{{ t.v }}">{{ t.label }}</option></sc-for>
+                  </select>
+                  <button onClick="{{ editDelete }}" style="border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 16px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="border-color:var(--warm-ink);color:var(--warm-ink)">Удалить окно</button>
+                  <button onClick="{{ editClose }}" style="border:none;background:var(--acc-ink);color:var(--card);padding:11px 18px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:20px" style-hover="opacity:.9">Готово</button>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="padding:12px 20px 18px">
+              <button onClick="{{ toggleRare }}" style="border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;padding:10px 0;text-align:left">{{ rareLabel }}</button>
+              <sc-if value="{{ rareOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:6px;font-size:14px;align-items:center">
+                  <div><div style="font-size:11.5px;color:var(--muted)">Батарея</div><div style="font-weight:500;color:{{ sel.batColor }}">{{ sel.battery }}%</div></div>
+                  <div><div style="font-size:11.5px;color:var(--muted)">Источник уставки</div><div style="font-weight:500">{{ sel.sourceLabel }}</div></div>
+                  <div><div style="font-size:11.5px;color:var(--muted)">Пределы t°</div><div style="font-weight:500;font-variant-numeric:tabular-nums">{{ sel.lower }}° — {{ sel.upper }}°</div></div>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;min-height:44px"><input type="checkbox" checked="{{ sel.childLock }}" onChange="{{ toggleLock }}">Замок от детей</label>
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;min-height:44px"><input type="checkbox" checked="{{ sel.preheat }}" onChange="{{ togglePreheat }}">Преднагрев</label>
+                </div>
+              </sc-if>
+            </div>
+          </section>
+        </sc-if>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;default&quot;: &quot;light&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Вид&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const wd = [[360,480],[960,1350]], we = [[360,1350]];
+    const P = () => [wd,wd,wd,wd,wd,we,we].map(d => d.map(w => w.slice()));
+    const mk = (id,name,air,floor,hum,bat,o) => Object.assign({id,name,air,floor,hum,bat,
+      sp:{home:22,away:19,pause:5,holiday:22}, lower:4, upper:35, enabled:true, program:P(),
+      heating:false, override:null, preset:'home', lock:false, preheat:false, fault:false}, o||{});
+    this.state = {
+      theme: null, view: -1, rare: false, edit: null, copied: false, menu: null,
+      vac: null, vacOpen: false,
+      vf: {kind:'away', when:'now', start:'', end:'', rooms:[true,true,true,true,true,true], temp:17},
+      rooms: [
+        mk(0,'Гостиная',22.5,21.7,49,65),
+        mk(1,'Спальня',21.8,21.2,52,80,{heating:true, override:{temp:23, by:'device'}, program:[[[360,480],[1200,1380]],[[360,480],[1200,1380]],[[360,480],[1200,1380]],[[360,480],[1200,1380]],[[360,480],[1200,1380]],we.map(w=>w.slice()),we.map(w=>w.slice())]}),
+        mk(2,'Гостевая',19.6,19.0,47,91,{enabled:false, preset:'away'}),
+        mk(3,'Кабинет',22.0,21.5,45,34,{override:{mode:'pause', by:'panel'}}),
+        mk(4,'Ванная',23.1,24.0,58,72,{heating:true, lock:true, sp:{home:23,away:20,pause:5,holiday:23}, program:[[[300,1380]],[[300,1380]],[[300,1380]],[[300,1380]],[[300,1380]],[[300,1380]],[[300,1380]]]}),
+        mk(5,'Душевая',22.7,23.2,61,15,{fault:true})
+      ]
+    };
+  }
+  now() { const d = new Date(); return {d:(d.getDay()+6)%7, min:d.getHours()*60+d.getMinutes(), label:('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}; }
+  m2t(m) { return ('0'+Math.floor(m/60)).slice(-2)+':'+('0'+(m%60)).slice(-2); }
+  inWin(prog, min) { return prog.some(w => min>=w[0] && min<w[1]); }
+  nextChange(room, now) {
+    const D=['пн','вт','ср','чт','пт','сб','вс'];
+    for (let k=0;k<8;k++){ const di=(now.d+k)%7;
+      const bs=[]; room.program[di].forEach(w=>{bs.push({t:w[0],mode:'Дома'});bs.push({t:w[1]%1440,mode:'Вне дома',raw:w[1]});});
+      bs.sort((a,b)=>(a.raw||a.t)-(b.raw||b.t));
+      for(const b of bs){ const t=b.raw||b.t; if(k>0||t>now.min){ const lbl=k===0?'сегодня в '+this.m2t(t%1440):(k===1?'завтра в '+this.m2t(t%1440):D[di]+' '+this.m2t(t%1440)); return {label:lbl, mode:b.mode}; } }
+    } return null;
+  }
+  upd(fn){ this.setState(s=>{const rooms=s.rooms.map(r=>({...r})); fn(rooms,s); return {rooms};}); }
+  dragEdge(ev, di, wi, edge) {
+    ev.stopPropagation(); ev.preventDefault();
+    const bar = ev.currentTarget.closest('[data-bar]');
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    this._dragged = false;
+    const move = (e) => {
+      this._dragged = true;
+      let m = Math.round(((e.clientX - rect.left) / rect.width) * 1440 / 30) * 30;
+      m = Math.max(0, Math.min(1440, m));
+      this.upd(rs => {
+        const x = rs[this.state.view];
+        const prog = x.program.map(d => d.map(w => w.slice()));
+        const day = prog[di]; const w = day[wi];
+        if (edge === 's') { let lo = 0; if (wi > 0) lo = day[wi-1][1]; w[0] = Math.max(lo, Math.min(m, w[1]-30)); }
+        else { let hi = 1440; if (wi < day.length-1) hi = day[wi+1][0]; w[1] = Math.min(hi, Math.max(m, w[0]+30)); }
+        x.program = prog;
+      });
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); setTimeout(()=>{this._dragged=false;},50); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+  renderVals() {
+    const S=this.state, now=this.now(), ML={home:'Дома',away:'Вне дома',pause:'Пауза',holiday:'Отпуск'};
+    const theme = S.theme ?? this.props.theme ?? 'light';
+    const vac = S.vac;
+    const eff = (r) => {
+      if (vac && vac.rooms[r.id]) {
+        if (vac.kind==='away') return {label:'Отпуск', origin:'vac', until:'до '+vac.endLabel, target:vac.temp};
+        const home=this.inWin(r.program[5], now.min);
+        return {label:'Отпуск дома', origin:'vac', until:'по субботней программе, до '+vac.endLabel, target:home?r.sp.home:r.sp.away};
+      }
+      const nc=this.nextChange(r, now);
+      const untilB = 'до границы расписания ('+(nc?nc.label:'—')+')';
+      if (r.override) {
+        const t = r.override.temp!=null ? r.override.temp : r.sp[r.override.mode];
+        return {label: r.override.temp!=null ? 'Ручной' : ML[r.override.mode], origin:r.override.by, until:untilB, target:t, ovr:true};
+      }
+      if (!r.enabled) return {label:ML[r.preset], origin:'schedule', until:'расписание выключено', target:r.sp[r.preset]};
+      const home=this.inWin(r.program[now.d], now.min);
+      return {label:home?'Дома':'Вне дома', origin:'schedule', until:'по расписанию · далее '+(nc?nc.mode+' — '+nc.label:'—'), target:home?r.sp.home:r.sp.away};
+    };
+    const bump=(i,delta)=>this.upd(rs=>{ const x=rs[i]; if(vac&&vac.rooms[x.id]) return;
+      const cur = eff(x).target; const nt=Math.min(x.upper,Math.max(x.lower, Math.round((cur+delta)*2)/2));
+      x.override={temp:nt, by:'panel'}; });
+    const badgeOf=(e)=>{
+      if(e.origin==='device') return {text:'изменено на термостате', bg:'var(--warm-soft)', fg:'var(--warm-ink)'};
+      if(e.origin==='panel') return {text:'изменено извне', bg:'var(--acc-soft)', fg:'var(--acc-ink)'};
+      if(e.origin==='vac') return {text:'отпуск', bg:'var(--acc-soft)', fg:'var(--acc-ink)'};
+      return null;
+    };
+    const navRooms = S.rooms.map((r,i)=>({ name:r.name, air:r.air.toFixed(1), heating:r.heating,
+      bg: S.view===i?'var(--card)':'transparent', shadow: S.view===i?'var(--shadow)':'none',
+      onSelect:()=>this.setState({view:i, edit:null}) }));
+    const rooms = S.rooms.map((r,i)=>{ const e=eff(r); const b=badgeOf(e);
+      const vacd = !!(vac && vac.rooms[r.id]);
+      const modeOptions = [['home','Дома'],['away','Вне дома'],['pause','Пауза'],['holiday','Выходные']].map(([k,label])=>({
+        label, bg: (r.override&&r.override.mode===k)?'var(--acc-soft)':'transparent',
+        onPick:(ev)=>{ ev.stopPropagation(); if(vacd){ this.setState({menu:null}); return; }
+          this.upd(rs=>{ rs[i].override={mode:k, by:'panel'}; }); this.setState({menu:null}); } }));
+      return { name:r.name, air:r.air.toFixed(1), floor:r.floor.toFixed(1), hum:Math.round(r.hum), heating:r.heating, fault:r.fault,
+        modeLabel:e.label, target:e.target.toFixed(1),
+        targetColor: r.heating?'var(--warm-ink)':'var(--ink)',
+        valveLabel: r.heating?'открыта':'закрыта', valveColor: r.heating?'var(--warm-ink)':'var(--ink)',
+        heatColor: r.heating?'var(--warm-ink)':'var(--line)',
+        heatTitle: r.heating?'Запрос тепла активен — термостат греет':'Запроса тепла нет',
+        lockColor: r.lock?'var(--ok)':'var(--muted)',
+        lockTitle: r.lock?'Замок от детей включён — нажмите, чтобы выключить':'Замок от детей выключен — нажмите, чтобы включить',
+        lockPath: r.lock?'M8 11V7a4 4 0 0 1 8 0v4':'M8 11V7a4 4 0 0 1 7.5-2',
+        onLockToggle:(ev)=>{ev.stopPropagation(); this.upd(rs=>{rs[i].lock=!rs[i].lock;});},
+        hasBadge:!!b, badge:b?b.text:'', badgeBg:b?b.bg:'transparent', badgeFg:b?b.fg:'var(--ink)',
+        menuOpen: S.menu===i, modeOptions,
+        onModeClick:(ev)=>{ ev.stopPropagation(); this.setState({menu: S.menu===i?null:i}); },
+        onSelect: ()=>{ if(S.menu!==null){ this.setState({menu:null}); return; } this.setState({view:i, edit:null}); },
+        tempInc:(ev)=>{ev.stopPropagation(); bump(i,0.5);},
+        tempDec:(ev)=>{ev.stopPropagation(); bump(i,-0.5);} };
+    });
+    const isRoom = S.view>=0;
+    const ri = isRoom? S.view : 0;
+    const r = S.rooms[ri], e = eff(r);
+    const originTxt = e.origin==='device'?'изменено на самом термостате':(e.origin==='panel'?'изменено извне (страница / приложение)':(e.origin==='vac'?'отпуск':'по расписанию'));
+    const sel = { name:r.name, whyLine: e.label+' · '+originTxt+' · '+e.until,
+      air:r.air.toFixed(1), floor:r.floor.toFixed(1), hum:Math.round(r.hum),
+      target:e.target.toFixed(1), targetColor: r.heating?'var(--warm-ink)':'var(--ink)', heatLabel: r.heating?'греет':'не греет',
+      hasOverride:!!r.override, fault:r.fault,
+      battery:r.bat, batColor:r.bat<=20?'var(--warm-ink)':'var(--ink)',
+      sourceLabel: e.origin==='device'?'с самого термостата':(e.origin==='panel'?'извне (HA / приложение)':'по расписанию'),
+      lower:r.lower.toFixed(1), upper:r.upper.toFixed(1), childLock:r.lock, preheat:r.preheat };
+    const vacDisabled = !!(vac && vac.rooms[r.id]);
+    const quick = [{m:'away',label:'Сейчас ухожу из дома'},{m:'pause',label:'Пауза'},{m:'home',label:'Дома сегодня днём'}].map(q=>{
+      const act = r.override && r.override.mode===q.m;
+      return {label:q.label, bg:act?'var(--acc-ink)':'transparent', fg:act?'var(--card)':'var(--ink)',
+        onClick:()=>{ if(vacDisabled) return; this.upd(rs=>{ const x=rs[ri]; x.override = act?null:{mode:q.m, by:'panel'}; }); }};
+    });
+    const setpoints = [['home','Дома'],['away','Вне дома'],['pause','Пауза'],['holiday','Отпуск']].map(([k,label])=>({
+      label, val:r.sp[k].toFixed(1),
+      inc:()=>this.upd(rs=>{const x=rs[ri]; x.sp={...x.sp,[k]:Math.min(x.upper, x.sp[k]+0.5)};}),
+      dec:()=>this.upd(rs=>{const x=rs[ri]; x.sp={...x.sp,[k]:Math.max(x.lower, x.sp[k]-0.5)};}) }));
+    const DAY=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    const days = DAY.map((label,di)=>({ label, isToday:di===now.d, w:di===now.d?'700':'400', color:di===now.d?'var(--ink)':'var(--muted)',
+      windows: r.program[di].map((w,wi)=>({ left:(w[0]/1440*100).toFixed(2)+'%', width:((w[1]-w[0])/1440*100).toFixed(2)+'%',
+        bg: r.enabled?'var(--acc)':'var(--line)', title:'Дома '+this.m2t(w[0])+'—'+this.m2t(w[1]),
+        border: (S.edit&&S.edit.d===di&&S.edit.i===wi)?'2px solid var(--acc-ink)':'2px solid transparent',
+        onEdit:()=>{ if(this._dragged) return; this.setState({edit:{d:di,i:wi}}); },
+        onDragL:(ev)=>this.dragEdge(ev,di,wi,'s'),
+        onDragR:(ev)=>this.dragEdge(ev,di,wi,'e') })),
+      onAdd:()=>this.upd((rs,st)=>{ const x=rs[ri]; const prog=x.program.map(d=>d.map(w=>w.slice()));
+        let s0=480; const day=prog[di].sort((a,b)=>a[0]-b[0]);
+        for(const w of day){ if(s0+30<=w[0]) break; s0=Math.max(s0,w[1]); }
+        if(s0>=1440) return; day.push([s0,Math.min(s0+120,1440)]); day.sort((a,b)=>a[0]-b[0]); x.program=prog;
+        this.setState({edit:{d:di,i:day.findIndex(w=>w[0]===s0)}}); }) }));
+    const edit=S.edit; const ew = edit? r.program[edit.d][edit.i] : null;
+    const opts=[]; for(let m=0;m<=1440;m+=30) opts.push({v:m,label:this.m2t(m===1440?1440:m)}); opts[48].label='24:00';
+    const setWin=(field,val)=>this.upd(rs=>{ const x=rs[ri]; const prog=x.program.map(d=>d.map(w=>w.slice())); const w=prog[edit.d][edit.i];
+      if(field==='s') w[0]=Math.min(val,w[1]-30); else w[1]=Math.max(val,w[0]+30);
+      const day=prog[edit.d]; for(let j=0;j<day.length;j++){ if(j===edit.i) continue; const o=day[j]; if(w[0]<o[1]&&o[0]<w[1]){ if(j<edit.i) w[0]=Math.max(w[0],o[1]); else w[1]=Math.min(w[1],o[0]); } }
+      x.program=prog; });
+    const vf=S.vf;
+    const satMissing = S.rooms.filter((x,i)=>vf.rooms[i] && x.program[5].length===0).map(x=>x.name);
+    const atHomeBlocked = satMissing.length>0;
+    const vacKinds=[{k:'away',label:'В отсутствии'},{k:'at_home',label:'Отдых дома'}].map(o=>({ label:o.label,
+      bg: vf.kind===o.k?'var(--card)':'transparent', fg:'var(--ink)',
+      disabled: o.k==='at_home'&&atHomeBlocked, op: (o.k==='at_home'&&atHomeBlocked)?'.45':'1',
+      title: o.k==='at_home'&&atHomeBlocked?'Нужна суббота в расписании: '+satMissing.join(', '):'',
+      onClick:()=>this.setState({vf:{...vf,kind:o.k}}) }));
+    const vacWhens=[{k:'now',label:'Сейчас'},{k:'plan',label:'План'}].map(o=>({ label:o.label,
+      bg: vf.when===o.k?'var(--card)':'transparent', fg:'var(--ink)',
+      onClick:()=>this.setState({vf:{...vf,when:o.k}}) }));
+    const vacRooms=S.rooms.map((x,i)=>({name:x.name, checked:vf.rooms[i], onToggle:()=>{ const rr=vf.rooms.slice(); rr[i]=!rr[i]; this.setState({vf:{...vf,rooms:rr}}); }}));
+    const fmtD=(v)=>{ if(!v) return '—'; const d=new Date(v); return isNaN(d)?v:('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+(v.length>10?' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2):''); };
+    const vacStartDisabled = !vf.end || (vf.when==='plan'&&!vf.start) || !vf.rooms.some(x=>x);
+    return {
+      theme, themeBtnLabel: theme==='light'?'Тёмная тема':'Светлая тема',
+      toggleTheme:()=>this.setState({theme: theme==='light'?'dark':'light'}),
+      nowLabel:['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'][now.d]+' '+now.label,
+      isSummary: S.view<0, isRoom,
+      goSummary:()=>this.setState({view:-1, edit:null}),
+      summaryBg: S.view<0?'var(--card)':'transparent', summaryShadow: S.view<0?'var(--shadow)':'none',
+      navRooms, rooms, sel, quick, setpoints, days,
+      selTempInc:(ev)=>{ev.stopPropagation(); bump(ri,0.5);},
+      selTempDec:(ev)=>{ev.stopPropagation(); bump(ri,-0.5);},
+      clearOverride:()=>this.upd(rs=>{rs[ri].override=null;}),
+      vacDisabled, quickOpacity: vacDisabled?'.45':'1',
+      schedTgBg: r.enabled?'var(--acc-soft)':'var(--soft)', schedTgFg: r.enabled?'var(--acc-ink)':'var(--muted)',
+      schedTgLabel: r.enabled?'Включено':'Выключено',
+      toggleSchedule:()=>this.upd(rs=>{rs[ri].enabled=!rs[ri].enabled;}),
+      schedHint: r.enabled? 'Синие окна — «Дома» ('+r.sp.home.toFixed(1)+'°), остальное время — «Вне дома» ('+r.sp.away.toFixed(1)+'°).' : 'Расписание выключено — программа сохранена, но не управляет термостатом.',
+      applyStd:()=>this.upd(rs=>{ const wd=[[360,480],[960,1350]], we=[[360,1350]]; rs[ri].program=[wd,wd,wd,wd,wd,we,we].map(d=>d.map(w=>w.slice())); this.setState({edit:null}); }),
+      copyAll:()=>{ this.upd(rs=>{ const src=rs[ri].program; rs.forEach((x,i)=>{ if(i!==ri) x.program=src.map(d=>d.map(w=>w.slice())); }); }); this.setState({copied:true}); clearTimeout(this._ct); this._ct=setTimeout(()=>this.setState({copied:false}),2500); },
+      copyLabel: S.copied?'Скопировано на все ✓':'Скопировать на все комнаты',
+      nowLeft:(now.min/1440*100).toFixed(2)+'%',
+      editOpen:!!ew, editDayLabel: ew?DAY[edit.d]:'', editStart: ew?ew[0]:0, editEnd: ew?ew[1]:0,
+      startOpts:opts.slice(0,48), endOpts:opts.slice(1),
+      onEditStart:(ev)=>setWin('s',+ev.target.value), onEditEnd:(ev)=>setWin('e',+ev.target.value),
+      editDelete:()=>this.upd(rs=>{ const x=rs[ri]; const prog=x.program.map(d=>d.map(w=>w.slice())); prog[edit.d].splice(edit.i,1); x.program=prog; this.setState({edit:null}); }),
+      editClose:()=>this.setState({edit:null}),
+      rareOpen:S.rare, rareLabel:(S.rare?'▴':'▾')+' Батарея, замок, преднагрев, пределы',
+      toggleRare:()=>this.setState({rare:!S.rare}),
+      toggleLock:()=>this.upd(rs=>{rs[ri].lock=!rs[ri].lock;}),
+      togglePreheat:()=>this.upd(rs=>{rs[ri].preheat=!rs[ri].preheat;}),
+      vacActive:!!vac, vacSummary: vac? (vac.kind==='away'?'«В отсутствии» · '+vac.temp.toFixed(1)+'° · до '+vac.endLabel:'«Отдых дома» · по субботней программе · до '+vac.endLabel)+' · '+vac.count+' помещ.' :'',
+      vacEdit:()=>this.setState({vacOpen:true, view:-1}),
+      vacClear:()=>this.setState({vac:null, vacOpen:false}),
+      vacFormOpen:S.vacOpen, vacFormClosed:!S.vacOpen,
+      vacOpenLabel: vac?'Исправить параметры':'Запланировать отпуск',
+      vacOpenForm:()=>this.setState({vacOpen:true}),
+      vacCancelForm:()=>this.setState({vacOpen:false}),
+      vacKinds, vacWhens, vacRooms,
+      vacKindHint: vf.kind==='away'? 'Все выбранные термостаты держат одну пониженную температуру.' : 'Каждый день отпуска — по субботней программе. Суббота обязательна и не может быть стёрта, пока отпуск запланирован.',
+      vacShowStart: vf.when==='plan', vacDateType: vf.kind==='at_home'?'date':'datetime-local',
+      vacStart:vf.start, vacEnd:vf.end,
+      onVacStart:(ev)=>this.setState({vf:{...vf,start:ev.target.value}}),
+      onVacEnd:(ev)=>this.setState({vf:{...vf,end:ev.target.value}}),
+      vacIsAway: vf.kind==='away', vacTemp:vf.temp.toFixed(1),
+      vacTempInc:()=>this.setState({vf:{...vf,temp:Math.min(35,vf.temp+0.5)}}),
+      vacTempDec:()=>this.setState({vf:{...vf,temp:Math.max(4,vf.temp-0.5)}}),
+      vacStartDisabled, vacStartOpacity: vacStartDisabled?'.45':'1',
+      vacStartLabel: vac?'Сохранить изменения':(vf.when==='now'?'Начать отпуск сейчас':'Запланировать'),
+      vacFormNote: vacStartDisabled?'Укажите даты и хотя бы одно помещение':'',
+      vacStartAction:()=>{ if(vacStartDisabled) return;
+        this.setState({vac:{kind:vf.kind, temp:vf.temp, rooms:vf.rooms.slice(), count:vf.rooms.filter(x=>x).length,
+          endLabel:fmtD(vf.end), startLabel: vf.when==='now'?'сейчас':fmtD(vf.start)}, vacOpen:false}); }
+    };
+  }
+}
+</script>
+</body>
+</html>
