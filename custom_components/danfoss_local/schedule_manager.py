@@ -49,6 +49,7 @@ SERVICE_COPY_SCHEDULE = "copy_schedule"
 SERVICE_SET_HOLIDAY = "set_holiday"
 SERVICE_CLEAR_HOLIDAY = "clear_holiday"
 SERVICE_ENABLE_SCHEDULE = "enable_schedule"
+SERVICE_RESUME_SCHEDULE = "resume_schedule"
 
 _WINDOW_SCHEMA = vol.Schema({vol.Required("start"): cv.string, vol.Required("end"): cv.string})
 _PROGRAM_SCHEMA = vol.Schema({vol.Required("days"): vol.All([[_WINDOW_SCHEMA]], vol.Length(min=7, max=7))})
@@ -217,6 +218,14 @@ class ScheduleManager:
         await self._apply_now(device_id)
         await self._async_save()
 
+    async def async_resume(self, device_id: str) -> None:
+        """Drop a manual override right now: put the thermostat back to what
+        the schedule dictates at this moment (the app's "Return to schedule")."""
+        if self.engine.get_schedule(device_id) is None:
+            raise vol.Invalid(f"{device_id} has no schedule to resume")
+        await self._apply_now(device_id)
+        self._notify()
+
     async def async_enable(self, device_id: str, enabled: bool) -> None:
         cur = self._current(device_id)
         self.engine.set_schedule(device_id, DeviceSchedule(cur.program, cur.holiday, enabled))
@@ -300,6 +309,11 @@ def async_register_services(hass: HomeAssistant, get_manager: Callable[[], Sched
         for dev in targets_of(m, call):
             await m.async_enable(dev, call.data["enabled"])
 
+    async def resume_schedule(call: ServiceCall) -> None:
+        m = mgr()
+        for dev in targets_of(m, call):
+            await m.async_resume(dev)
+
     target = {vol.Optional("device_id"): cv.string, vol.Optional("all", default=False): cv.boolean}
     hass.services.async_register(
         DOMAIN, SERVICE_SET_SCHEDULE, set_schedule,
@@ -330,3 +344,4 @@ def async_register_services(hass: HomeAssistant, get_manager: Callable[[], Sched
         DOMAIN, SERVICE_ENABLE_SCHEDULE, enable_schedule,
         schema=vol.Schema({**target, vol.Required("enabled"): cv.boolean}),
     )
+    hass.services.async_register(DOMAIN, SERVICE_RESUME_SCHEDULE, resume_schedule, schema=vol.Schema(target))

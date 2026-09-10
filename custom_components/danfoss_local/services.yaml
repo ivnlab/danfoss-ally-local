@@ -133,3 +133,19 @@ enable_schedule:
       required: true
       selector:
         boolean:
+
+resume_schedule:
+  name: Return to schedule
+  description: Drop a manual override now and put the thermostat back to what its weekly schedule (or holiday) dictates at this moment.
+  fields:
+    device_id:
+      name: Device
+      required: false
+      selector:
+        device:
+          integration: danfoss_local
+    all:
+      name: All thermostats
+      required: false
+      selector:
+        boolean:

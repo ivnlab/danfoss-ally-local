@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 from .coordinator import DanfossLocalCoordinator
+from .panel import async_register_heating_panel, async_unregister_heating_panel
 from .schedule_manager import ScheduleManager, async_register_services
 
 PLATFORMS = ["climate", "sensor", "binary_sensor", "number", "switch", "lock"]
@@ -29,6 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await async_register_heating_panel(hass)
     return True
 
 
@@ -40,4 +42,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         manager = getattr(coordinator, "schedule_manager", None)
         if manager is not None:
             await manager.async_unload()
+        async_unregister_heating_panel(hass)
     return unload_ok
