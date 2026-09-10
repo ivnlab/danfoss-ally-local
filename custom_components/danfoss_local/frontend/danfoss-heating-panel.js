@@ -227,6 +227,13 @@ class DanfossHeatingPanel extends HTMLElement {
     const schedPreset = SCHED_TO_PRESET[r.schedState] || null;
     const manual = r.hvac === "heat" || (r.preset == null && r.hvac !== "unavailable");
     if (manual) return { label: "Ручной", origin: r.source === "device" ? "device" : "panel", until: untilB, target: r.target, ovr: true };
+    // Temporary setpoint: the active target differs from the preset's own
+    // setpoint while the preset is still home/away (set on the device or in
+    // the app). Shown as a manual override until the next boundary.
+    const presetSp = r.preset === "home" ? r.sp.home : r.preset === "away" ? r.sp.away : null;
+    if (presetSp != null && r.target != null && Math.abs(r.target - presetSp) >= 0.05) {
+      return { label: "Ручной", origin: r.source === "device" ? "device" : "panel", until: untilB, target: r.target, ovr: true };
+    }
     if (r.enabled && schedPreset && r.preset && r.preset !== schedPreset) {
       return { label: MODE_LABEL[r.preset] || r.preset, origin: r.source === "device" ? "device" : "panel", until: untilB, target: r.target, ovr: true };
     }

@@ -383,11 +383,14 @@ class DanfossLocalClimate(DanfossLocalEntity, ClimateEntity):
         self, mode: str | None, for_writing: bool = True
     ) -> str:
         """Map a Danfoss mode to a Danfoss setpoint field."""
-        if (
-            not for_writing
-            and self.device_value("setpointchangesource", "SetpointChangeSource")
-            == "Manual"
-        ):
+        # For reading, dp114 ("manual_mode_fast") is the thermostat's actual
+        # active setpoint at this moment - including a temporary setpoint set
+        # on the device or in the app (the app calls it "Временная рабочая
+        # точка") that does NOT change the preset's own setpoint. Deriving the
+        # target from the preset instead hid such overrides completely
+        # (confirmed live 2026-09-10: RT5 at leaving_home with dp114=18.0
+        # showed 19.0 in HA).
+        if not for_writing and self.device_value("manual_mode_fast") is not None:
             return "manual_mode_fast"
 
         if mode in {"at_home", "home"}:
